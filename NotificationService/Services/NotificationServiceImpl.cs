@@ -3,6 +3,7 @@ using MailKit.Security;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using MimeKit;
+using NotificationService.Clients;
 using NotificationService.Data;
 using NotificationService.DTOs;
 using NotificationService.Hubs;
@@ -22,19 +23,22 @@ namespace NotificationService.Services
         private readonly IHubContext<NotificationHub> _hubContext;
         private readonly IConfiguration _configuration;
         private readonly ILogger<NotificationServiceImpl> _logger;
+        private readonly IAuthServiceClient _authServiceClient;
 
         public NotificationServiceImpl(
             NotificationDbContext context,
             INotificationRepository repository,
             IHubContext<NotificationHub> hubContext,
             IConfiguration configuration,
-            ILogger<NotificationServiceImpl> logger)
+            ILogger<NotificationServiceImpl> logger,
+            IAuthServiceClient authServiceClient)
         {
             _context = context;
             _repository = repository;
             _hubContext = hubContext;
             _configuration = configuration;
             _logger = logger;
+            _authServiceClient = authServiceClient;
         }
 
         public async Task<Notification> Send(SendNotificationDto dto)
@@ -66,14 +70,20 @@ namespace NotificationService.Services
             SendBulkNotificationDto dto)
         {
             var notifications = new List<Notification>();
-
-            // If no specific recipients send to all
-            var recipientIds = dto.RecipientIds.Any()
-                ? dto.RecipientIds
-                : await _context.Notifications
-                    .Select(n => n.RecipientId)
-                    .Distinct()
-                    .ToListAsync();
+            // Get recipients based on target
+            List<int> recipientIds;
+            if (dto.RecipientIds != null && dto.RecipientIds.Any())
+            {
+                recipientIds = dto.RecipientIds;
+            }
+            else if (dto.TargetRole == "ALL")
+            {
+                recipientIds = await _authServiceClient.GetAllUserIds();
+            }
+            else
+            {
+                recipientIds = await _authServiceClient.GetUserIdsByRole(dto.TargetRole);
+            }
 
             foreach (var recipientId in recipientIds)
             {
@@ -85,15 +95,14 @@ namespace NotificationService.Services
                     Title = dto.Title,
                     Message = dto.Message
                 };
-
                 notifications.Add(notification);
             }
 
             _context.Notifications.AddRange(notifications);
             await _context.SaveChangesAsync();
 
-            // Push real-time updates to all recipients
-            foreach (var recipientId in recipientIds)
+            // Push updates
+            foreach (var recipientId in recipientIds.Distinct())
             {
                 var unreadCount = await GetUnreadCount(recipientId);
                 await _hubContext.Clients
@@ -103,7 +112,6 @@ namespace NotificationService.Services
 
             return notifications;
         }
-
         public async Task<Notification> MarkAsRead(int notificationId)
         {
             var notification = await _context.Notifications
