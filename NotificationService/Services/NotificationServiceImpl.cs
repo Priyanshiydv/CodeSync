@@ -82,7 +82,7 @@ namespace NotificationService.Services
             }
             else
             {
-                recipientIds = await _authServiceClient.GetUserIdsByRole(dto.TargetRole);
+                recipientIds = await _authServiceClient.GetUserIdsByRole(dto.TargetRole!);
             }
 
             foreach (var recipientId in recipientIds)
