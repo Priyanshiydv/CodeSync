@@ -18,6 +18,7 @@ builder.Services.AddDbContext<CommentDbContext>(options =>
 // Services
 builder.Services.AddScoped<ICommentRepository, CommentRepository>();
 builder.Services.AddScoped<ICommentService, CommentServiceImpl>();
+builder.Services.AddHttpClient();
 
 // JWT Authentication
 var jwtKey = builder.Configuration["Jwt:Key"]!;

@@ -6,10 +6,6 @@ using System.Security.Claims;
 
 namespace NotificationService.Controllers
 {
-    /// <summary>
-    /// Handles all HTTP requests for notification management.
-    /// Exposes /api/notifications endpoints.
-    /// </summary>
     [ApiController]
     [Route("api/notifications")]
     public class NotificationController : ControllerBase
@@ -75,6 +71,45 @@ namespace NotificationService.Controllers
             {
                 await _notificationService.SendEmail(dto);
                 return Ok(new { message = "Email sent!" });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        // ADD — endpoint called by CommentService when @mention is detected
+        // receives mention payload and creates a MENTION notification
+        // case study §4.7 — @mentions trigger notification dispatch
+        [HttpPost("mention")]
+        public async Task<IActionResult> SendMentionNotification(
+            [FromBody] MentionNotificationDto dto)
+        {
+            try
+            {
+                // Build a SendNotificationDto from the mention payload
+                var notificationDto = new SendNotificationDto
+                {
+                    // ActorId = who wrote the comment with the mention
+                    ActorId = dto.ActorId,
+                    Type = "MENTION",
+                    Title = dto.Title,
+                    Message = dto.Message,
+                    RelatedId = dto.RelatedId,
+                    RelatedType = dto.RelatedType,
+                    DeepLinkUrl = dto.DeepLinkUrl,
+                    // RecipientUsername used to look up RecipientId
+                    RecipientUsername = dto.RecipientUsername
+                };
+
+                var notification = await _notificationService
+                    .SendMentionNotification(notificationDto);
+
+                return Ok(new
+                {
+                    message = $"Mention notification sent to @{dto.RecipientUsername}",
+                    notification
+                });
             }
             catch (Exception ex)
             {
