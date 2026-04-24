@@ -1,31 +1,31 @@
 using Docker.DotNet;
 using Docker.DotNet.Models;
 using ExecutionService.Data;
+using ExecutionService.Hubs;
 using ExecutionService.Models;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 
 namespace ExecutionService.Workers
 {
-    /// <summary>
-    /// Background worker that processes queued execution jobs.
-    /// Runs as IHostedService - picks up QUEUED jobs and executes
-    /// them in isolated Docker containers with resource limits.
-    /// </summary>
     public class ExecutionWorker : BackgroundService
     {
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<ExecutionWorker> _logger;
+        // ADD — SignalR hub context for streaming output
+        private readonly IHubContext<ExecutionHub> _hubContext;
 
-        // Sandbox resource limits from PDF requirements
         private const int MaxExecutionSeconds = 10;
-        private const long MaxMemoryBytes = 256 * 1024 * 1024; // 256MB
+        private const long MaxMemoryBytes = 256 * 1024 * 1024;
 
         public ExecutionWorker(
             IServiceScopeFactory scopeFactory,
-            ILogger<ExecutionWorker> logger)
+            ILogger<ExecutionWorker> logger,
+            IHubContext<ExecutionHub> hubContext) // ADD
         {
             _scopeFactory = scopeFactory;
             _logger = logger;
+            _hubContext = hubContext; // ADD
         }
 
         protected override async Task ExecuteAsync(
@@ -36,7 +36,6 @@ namespace ExecutionService.Workers
             while (!stoppingToken.IsCancellationRequested)
             {
                 await ProcessQueuedJobs(stoppingToken);
-                // Poll every 2 seconds for new jobs
                 await Task.Delay(2000, stoppingToken);
             }
         }
@@ -47,7 +46,6 @@ namespace ExecutionService.Workers
             var context = scope.ServiceProvider
                 .GetRequiredService<ExecutionDbContext>();
 
-            // Pick up next queued job
             var job = await context.ExecutionJobs
                 .FirstOrDefaultAsync(j => j.Status == "QUEUED", token);
 
@@ -62,21 +60,24 @@ namespace ExecutionService.Workers
             CancellationToken token)
         {
             var startTime = DateTime.UtcNow;
+            var jobId = job.JobId.ToString();
 
             try
             {
-                // Update status to RUNNING
                 job.Status = "RUNNING";
                 await context.SaveChangesAsync(token);
+
+                // ADD — notify frontend job has started
+                await _hubContext.Clients
+                    .Group(jobId)
+                    .SendAsync("JobStarted", jobId, token);
 
                 _logger.LogInformation(
                     "Executing job {JobId} in Docker container", job.JobId);
 
-                // Connect to Docker daemon
                 var dockerClient = new DockerClientConfiguration()
                     .CreateClient();
 
-                // Get language config
                 var language = await context.SupportedLanguages
                     .FirstOrDefaultAsync(
                         l => l.Name.ToLower() == job.Language.ToLower(),
@@ -88,29 +89,33 @@ namespace ExecutionService.Workers
                     job.Stderr = "Unsupported language!";
                     job.CompletedAt = DateTime.UtcNow;
                     await context.SaveChangesAsync(token);
+
+                    // ADD — stream error to frontend
+                    await _hubContext.Clients
+                        .Group(jobId)
+                        .SendAsync("JobFailed", jobId,
+                            "Unsupported language!", token);
                     return;
                 }
 
-                // Write source code to temp file
-                var tempDir = Path.Combine(Path.GetTempPath(), job.JobId.ToString());
+                var tempDir = Path.Combine(
+                    Path.GetTempPath(), job.JobId.ToString());
                 Directory.CreateDirectory(tempDir);
                 var sourceFile = Path.Combine(
                     tempDir, $"main{language.FileExtension}");
-                await File.WriteAllTextAsync(sourceFile, job.SourceCode, token);
+                await File.WriteAllTextAsync(
+                    sourceFile, job.SourceCode, token);
 
-                // Create container with resource limits
                 var container = await dockerClient.Containers
                     .CreateContainerAsync(new CreateContainerParameters
                     {
                         Image = language.DockerImage,
-                        Cmd = GetRunCommand(language.Name, language.FileExtension),
-                        // No network access in sandbox
+                        Cmd = GetRunCommand(
+                            language.Name, language.FileExtension),
                         NetworkDisabled = true,
                         HostConfig = new HostConfig
                         {
-                            // Max 256MB memory
                             Memory = MaxMemoryBytes,
-                            // No filesystem write outside /tmp
                             ReadonlyRootfs = true,
                             Binds = new List<string>
                             {
@@ -120,54 +125,66 @@ namespace ExecutionService.Workers
                         }
                     }, token);
 
-                // Start container
                 await dockerClient.Containers
                     .StartContainerAsync(container.ID,
                         new ContainerStartParameters(), token);
 
-                // Wait for completion with timeout
+                // ADD — stream stdout in real time while container runs
+                var stdoutBuilder = new System.Text.StringBuilder();
+                var stderrBuilder = new System.Text.StringBuilder();
+
                 using var timeoutToken = new CancellationTokenSource(
                     TimeSpan.FromSeconds(MaxExecutionSeconds));
 
-                var waitResult = await dockerClient.Containers
-                    .WaitContainerAsync(container.ID, timeoutToken.Token);
-                
-                // Get output logs using MultiplexedStream
+                // Stream logs as they come in
                 var logs = await dockerClient.Containers
                     .GetContainerLogsAsync(container.ID, false,
                         new ContainerLogsParameters
                         {
                             ShowStdout = true,
-                            ShowStderr = true
-                        }, token);
+                            ShowStderr = true,
+                            Follow = true  // ADD — follow=true streams in real time
+                        }, timeoutToken.Token);
 
-                // MultiplexedStream separates stdout and stderr
-                var stdoutBuilder = new System.Text.StringBuilder();
-                var stderrBuilder = new System.Text.StringBuilder();
                 var buffer = new byte[4096];
 
                 while (true)
                 {
                     var result = await logs.ReadOutputAsync(
-                        buffer, 0, buffer.Length, token);
+                        buffer, 0, buffer.Length, timeoutToken.Token);
 
                     if (result.EOF) break;
 
                     var text = System.Text.Encoding.UTF8
                         .GetString(buffer, 0, result.Count);
 
-                    // MultiplexedStream tells us which stream this chunk is from
-                    if (result.Target == MultiplexedStream.TargetStream.StandardOut)
+                    if (result.Target ==
+                        MultiplexedStream.TargetStream.StandardOut)
+                    {
                         stdoutBuilder.Append(text);
+
+                        // ADD — stream stdout chunk to frontend in real time
+                        await _hubContext.Clients
+                            .Group(jobId)
+                            .SendAsync("StdoutChunk", jobId, text, token);
+                    }
                     else
+                    {
                         stderrBuilder.Append(text);
+
+                        // ADD — stream stderr chunk to frontend in real time
+                        await _hubContext.Clients
+                            .Group(jobId)
+                            .SendAsync("StderrChunk", jobId, text, token);
+                    }
                 }
+
+                var waitResult = await dockerClient.Containers
+                    .WaitContainerAsync(container.ID, token);
 
                 var stdout = stdoutBuilder.ToString();
                 var stderr = stderrBuilder.ToString();
 
-                
-                // Update job with results
                 job.Status = "COMPLETED";
                 job.Stdout = stdout;
                 job.Stderr = stderr;
@@ -176,20 +193,28 @@ namespace ExecutionService.Workers
                     .TotalMilliseconds;
                 job.CompletedAt = DateTime.UtcNow;
 
-                // Cleanup container
                 await dockerClient.Containers
                     .RemoveContainerAsync(container.ID,
                         new ContainerRemoveParameters { Force = true }, token);
 
-                // Cleanup temp files
                 Directory.Delete(tempDir, true);
+
+                // ADD — notify frontend job completed with final result
+                await _hubContext.Clients
+                    .Group(jobId)
+                    .SendAsync("JobCompleted", jobId, stdout, stderr,
+                        job.ExitCode, token);
             }
             catch (OperationCanceledException)
             {
-                // Job exceeded max execution time
                 job.Status = "TIMED_OUT";
                 job.Stderr = "Execution exceeded 10 second time limit!";
                 job.CompletedAt = DateTime.UtcNow;
+
+                // ADD — notify frontend of timeout
+                await _hubContext.Clients
+                    .Group(jobId)
+                    .SendAsync("JobTimedOut", jobId, token);
             }
             catch (Exception ex)
             {
@@ -197,6 +222,11 @@ namespace ExecutionService.Workers
                 job.Stderr = ex.Message;
                 job.CompletedAt = DateTime.UtcNow;
                 _logger.LogError(ex, "Job {JobId} failed", job.JobId);
+
+                // ADD — notify frontend of failure
+                await _hubContext.Clients
+                    .Group(jobId)
+                    .SendAsync("JobFailed", jobId, ex.Message, token);
             }
 
             await context.SaveChangesAsync(token);
@@ -212,22 +242,28 @@ namespace ExecutionService.Workers
                 "javascript" => new List<string>
                     { "node", "/app/main.js" },
                 "java" => new List<string>
-                    { "sh", "-c", "cd /app && javac main.java && java main" },
+                    { "sh", "-c",
+                        "cd /app && javac main.java && java main" },
                 "c" => new List<string>
-                    { "sh", "-c", "cd /app && gcc main.c -o main && ./main" },
+                    { "sh", "-c",
+                        "cd /app && gcc main.c -o main && ./main" },
                 "c++" => new List<string>
-                    { "sh", "-c", "cd /app && g++ main.cpp -o main && ./main" },
+                    { "sh", "-c",
+                        "cd /app && g++ main.cpp -o main && ./main" },
                 "csharp" => new List<string>
-                    { "sh", "-c", "cd /tmp && dotnet-script /app/main.cs" },   
+                    { "sh", "-c",
+                        "cd /tmp && dotnet-script /app/main.cs" },
                 "go" => new List<string>
                     { "sh", "-c", "cd /app && go run main.go" },
                 "rust" => new List<string>
-                    { "sh", "-c", "cd /app && rustc main.rs && ./main" },
+                    { "sh", "-c",
+                        "cd /app && rustc main.rs && ./main" },
                 "php" => new List<string>
                     { "php", "/app/main.php" },
                 "ruby" => new List<string>
                     { "ruby", "/app/main.rb" },
-                _ => new List<string> { "sh", "-c", "echo Unsupported language" }
+                _ => new List<string>
+                    { "sh", "-c", "echo Unsupported language" }
             };
         }
     }
