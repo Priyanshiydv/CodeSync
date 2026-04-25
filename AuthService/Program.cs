@@ -11,50 +11,78 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
-//  Database Connection
+// Database Connection
 builder.Services.AddDbContext<AuthDbContext>(options =>
     options.UseSqlServer(builder.Configuration
         .GetConnectionString("DefaultConnection")));
 
-//  Register Services for Dependency Injection
+// Register Services
 builder.Services.AddScoped<IAuthService, AuthServiceImpl>();
 builder.Services.AddScoped<JwtHelper>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 
-//  JWT Authentication Setup
+// JWT + Google + GitHub OAuth2 Authentication
 var jwtKey = builder.Configuration["Jwt:Key"]!;
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme =
+        JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme =
+        JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultSignInScheme = Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationDefaults.AuthenticationScheme;
+})
+.AddCookie("Cookies", options =>
+{
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+    options.Cookie.SameSite = SameSiteMode.Lax;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
     {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidAudience = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(jwtKey))
-        };
-    });
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = builder.Configuration["Jwt:Issuer"],
+        ValidAudience = builder.Configuration["Jwt:Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(
+            Encoding.UTF8.GetBytes(jwtKey))
+    };
+})
+// ADD — Google OAuth2
+.AddGoogle(options =>
+{
+    options.ClientId = builder.Configuration["OAuth:Google:ClientId"]!;
+    options.ClientSecret =
+        builder.Configuration["OAuth:Google:ClientSecret"]!;
+    // After Google login, redirect to our callback endpoint
+    options.CallbackPath = "/signin-google";
+})
+// ADD — GitHub OAuth2
+.AddGitHub(options =>
+{
+    options.ClientId = builder.Configuration["OAuth:GitHub:ClientId"]!;
+    options.ClientSecret =
+        builder.Configuration["OAuth:GitHub:ClientSecret"]!;
+    options.CallbackPath = "/signin-github";
+    // Request email scope from GitHub
+    options.Scope.Add("user:email");
+});
 
-//  Swagger with JWT + Custom Order
+// Swagger with JWT
 builder.Services.AddSwaggerGen(c =>
 {
-    //  Custom API Order: register → login → roles
     c.OrderActionsBy(apiDesc =>
     {
         var path = apiDesc.RelativePath?.ToLower() ?? "";
-
-        if (path.Contains("register"))
-            return "1";
-        if (path.Contains("login"))
-            return "2";
-        if (path.Contains("roles"))
-            return "3";
-
-        return "4";
+        if (path.Contains("register")) return "1";
+        if (path.Contains("login")) return "2";
+        if (path.Contains("google")) return "3";
+        if (path.Contains("github")) return "4";
+        if (path.Contains("roles")) return "5";
+        return "6";
     });
 
     c.SwaggerDoc("v1", new OpenApiInfo
@@ -63,7 +91,6 @@ builder.Services.AddSwaggerGen(c =>
         Version = "v1"
     });
 
-    //  JWT Support in Swagger
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Description = "Enter: Bearer {your JWT token}",
@@ -92,20 +119,20 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
-//  CORS for Angular Frontend
+// CORS for Angular — AllowCredentials required for OAuth2
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAngular", policy =>
     {
         policy.WithOrigins("http://localhost:4200")
               .AllowAnyHeader()
-              .AllowAnyMethod();
+              .AllowAnyMethod()
+              .AllowCredentials();
     });
 });
 
 var app = builder.Build();
 
-//  Middleware Pipeline
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
