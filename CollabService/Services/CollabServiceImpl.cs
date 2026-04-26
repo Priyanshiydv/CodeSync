@@ -13,6 +13,7 @@ namespace CollabService.Services
         private readonly CollabDbContext _context;
         private readonly ICollabRepository _repository;
         private readonly IHubContext<CollabHub> _hubContext;
+        private readonly OTService _otService;
 
         private readonly string[] _colors = new[]
         {
@@ -23,11 +24,13 @@ namespace CollabService.Services
         public CollabServiceImpl(
             CollabDbContext context,
             ICollabRepository repository,
-            IHubContext<CollabHub> hubContext)
+            IHubContext<CollabHub> hubContext,
+            OTService otService)
         {
             _context = context;
             _repository = repository;
             _hubContext = hubContext;
+            _otService = otService;
         }
 
         public async Task<CollabSession> CreateSession(
@@ -140,6 +143,8 @@ namespace CollabService.Services
             session.Status = "ENDED";
             session.EndedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
+
+            _otService.ClearSession(sessionId.ToString());
 
             await _hubContext.Clients
                 .Group(sessionId.ToString())
