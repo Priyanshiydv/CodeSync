@@ -34,6 +34,7 @@ namespace NotificationService.Models
 
         // Type of related entity for deep linking
         public string? RelatedType { get; set; }
+        public string? DeepLinkUrl { get; set; }
 
         public bool IsRead { get; set; } = false;
 

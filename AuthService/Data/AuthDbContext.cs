@@ -13,6 +13,8 @@ namespace AuthService.Data
         }
 
         public DbSet<User> Users { get; set; }
+        // ADD — audit log table
+        public DbSet<AuditLog> AuditLogs { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

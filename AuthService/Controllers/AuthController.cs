@@ -29,10 +29,10 @@ namespace AuthService.Controllers
                 var user = new User
                 {
                     FullName = dto.FullName,
-                    Username = dto.Email.Split('@')[0],
+                    Username = dto.Username,
                     Email = dto.Email,
                     PasswordHash = dto.Password,
-                    Role = dto.Role,
+                    Role = "Developer",
                     Provider = "LOCAL"
                 };
                 var token = await _authService.Register(user);

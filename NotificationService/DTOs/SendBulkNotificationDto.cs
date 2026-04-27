@@ -20,5 +20,6 @@ namespace NotificationService.DTOs
         public List<int> RecipientIds { get; set; } = new();
 
         public string Type { get; set; } = "COMMENT";
+        public string? TargetRole { get; set; } = "ALL";
     }
 }

@@ -4,24 +4,29 @@ using CommentService.Interfaces;
 using CommentService.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Text.RegularExpressions;
+using System.Text;
+using System.Text.Json;
 
 namespace CommentService.Services
 {
-    /// <summary>
-    /// Implements all comment CRUD, reply threading,
-    /// resolve/unresolve lifecycle and @mention parsing operations.
-    /// </summary>
     public class CommentServiceImpl : ICommentService
     {
         private readonly CommentDbContext _context;
         private readonly ICommentRepository _repository;
+        // ADD — HttpClient to call NotificationService
+        private readonly IHttpClientFactory _httpClientFactory;
+        // ADD — NotificationService base URL
+        private const string NotificationServiceUrl = "http://localhost:5857/api/notifications";
 
         public CommentServiceImpl(
             CommentDbContext context,
-            ICommentRepository repository)
+            ICommentRepository repository,
+            // ADD — inject IHttpClientFactory
+            IHttpClientFactory httpClientFactory)
         {
             _context = context;
             _repository = repository;
+            _httpClientFactory = httpClientFactory;
         }
 
         /// <summary>
@@ -32,6 +37,65 @@ namespace CommentService.Services
         {
             var matches = Regex.Matches(content, @"@(\w+)");
             return matches.Select(m => m.Groups[1].Value).ToList();
+        }
+
+        /// <summary>
+        /// ADD — Calls NotificationService to send a MENTION notification
+        /// for each @username found in the comment content.
+        /// Case study §4.7 — @mentions trigger HttpClient notification calls
+        /// </summary>
+        private async Task SendMentionNotificationsAsync(
+            Comment comment, List<string> mentionedUsernames)
+        {
+            try
+            {
+                var client = _httpClientFactory.CreateClient();
+
+                foreach (var username in mentionedUsernames)
+                {
+                    var payload = new
+                    {
+                        // Who triggered the mention
+                        actorId = comment.AuthorId,
+                        // Type matches Notification model §4.8
+                        type = "MENTION",
+                        title = $"@{username} mentioned you in a comment",
+                        message = comment.Content,
+                        // RelatedId = CommentId as required by case study §2.8
+                        relatedId = comment.CommentId.ToString(),
+                        relatedType = "Comment",
+                        // Deep-link URL so recipient can jump to the comment
+                        deepLinkUrl = $"/editor/{comment.ProjectId}?file={comment.FileId}&comment={comment.CommentId}",
+                        // Username so NotificationService can resolve recipientId
+                        recipientUsername = username
+                    };
+
+                    var json = JsonSerializer.Serialize(payload);
+                    var content = new StringContent(
+                        json, Encoding.UTF8, "application/json");
+
+                    var response = await client.PostAsync(
+                        $"{NotificationServiceUrl}/mention", content);
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        Console.WriteLine(
+                            $"Failed to send mention notification " +
+                            $"to @{username}: {response.StatusCode}");
+                    }
+                    else
+                    {
+                        Console.WriteLine(
+                            $"Mention notification sent to @{username}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Don't fail the comment if notification fails
+                Console.WriteLine(
+                    $"Notification error: {ex.Message}");
+            }
         }
 
         public async Task<Comment> AddComment(
@@ -62,13 +126,12 @@ namespace CommentService.Services
             _context.Comments.Add(comment);
             await _context.SaveChangesAsync();
 
-            // Parse @mentions and log them
-            // In production this would call NotificationService via HttpClient
+            // ADD — parse @mentions and call NotificationService
+            // replaces the old Console.WriteLine stub
             var mentions = ParseMentions(dto.Content);
             if (mentions.Any())
             {
-                Console.WriteLine(
-                    $"Mentions found: {string.Join(", ", mentions)}");
+                await SendMentionNotificationsAsync(comment, mentions);
             }
 
             return comment;
@@ -97,12 +160,11 @@ namespace CommentService.Services
             comment.Content = dto.Content;
             comment.UpdatedAt = DateTime.UtcNow;
 
-            // Re-parse mentions after update
+            // ADD — re-parse and send mention notifications on edit too
             var mentions = ParseMentions(dto.Content);
             if (mentions.Any())
             {
-                Console.WriteLine(
-                    $"Updated mentions: {string.Join(", ", mentions)}");
+                await SendMentionNotificationsAsync(comment, mentions);
             }
 
             await _context.SaveChangesAsync();

@@ -31,5 +31,7 @@ namespace NotificationService.DTOs
 
         public string? RelatedId { get; set; }
         public string? RelatedType { get; set; }
+         public string? DeepLinkUrl { get; set; }
+         public string? RecipientUsername { get; set; }
     }
 }

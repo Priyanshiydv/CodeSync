@@ -19,5 +19,6 @@ namespace NotificationService.Interfaces
         Task DeleteNotification(int notificationId);
         Task SendEmail(SendEmailDto dto);
         Task<List<Notification>> GetAll();
+         Task<Notification> SendMentionNotification(SendNotificationDto dto);
     }
 }

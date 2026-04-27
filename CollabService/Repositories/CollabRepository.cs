@@ -53,5 +53,15 @@ namespace CollabService.Repositories
             await _context.Participants
                 .CountAsync(p => p.SessionId == sessionId
                     && p.LeftAt == null);
+
+        // ADD — fetches all sessions where Status == "ACTIVE"
+        public async Task<IEnumerable<CollabSession>> FindActiveSessionsAsync()
+        {
+            return await _context.CollabSessions
+                .Where(s => s.Status == "ACTIVE")
+                .ToListAsync();
+        }
+               
     }
+    
 }

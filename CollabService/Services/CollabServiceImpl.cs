@@ -8,17 +8,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CollabService.Services
 {
-    /// <summary>
-    /// Implements all session lifecycle, participant management,
-    /// cursor update and SignalR broadcast operations.
-    /// </summary>
     public class CollabServiceImpl : ICollabService
     {
         private readonly CollabDbContext _context;
         private readonly ICollabRepository _repository;
         private readonly IHubContext<CollabHub> _hubContext;
+        private readonly OTService _otService;
 
-        // Predefined colors for participants
         private readonly string[] _colors = new[]
         {
             "#FF5733", "#33FF57", "#3357FF", "#FF33A8",
@@ -28,11 +24,13 @@ namespace CollabService.Services
         public CollabServiceImpl(
             CollabDbContext context,
             ICollabRepository repository,
-            IHubContext<CollabHub> hubContext)
+            IHubContext<CollabHub> hubContext,
+            OTService otService)
         {
             _context = context;
             _repository = repository;
             _hubContext = hubContext;
+            _otService = otService;
         }
 
         public async Task<CollabSession> CreateSession(
@@ -46,13 +44,13 @@ namespace CollabService.Services
                 Language = dto.Language,
                 MaxParticipants = dto.MaxParticipants,
                 IsPasswordProtected = dto.IsPasswordProtected,
-                SessionPassword = dto.SessionPassword
+                SessionPassword = dto.SessionPassword,
+                LastActivityAt = DateTime.UtcNow  // ADD — initialize activity timestamp
             };
 
             _context.CollabSessions.Add(session);
             await _context.SaveChangesAsync();
 
-            // Add owner as HOST participant
             var participant = new Participant
             {
                 SessionId = session.SessionId,
@@ -83,17 +81,14 @@ namespace CollabService.Services
             if (session.Status == "ENDED")
                 throw new Exception("Session has ended!");
 
-            // Check password if protected
             if (session.IsPasswordProtected &&
                 session.SessionPassword != dto.SessionPassword)
                 throw new Exception("Incorrect session password!");
 
-            // Check participant limit
             var count = await _repository.CountParticipants(sessionId);
             if (count >= session.MaxParticipants)
                 throw new Exception("Session is full!");
 
-            // Check if already joined
             var existing = await _context.Participants
                 .FirstOrDefaultAsync(p =>
                     p.SessionId == sessionId && p.UserId == dto.UserId);
@@ -101,7 +96,6 @@ namespace CollabService.Services
             if (existing != null)
                 throw new Exception("User already in session!");
 
-            // Assign unique color
             var color = _colors[count % _colors.Length];
 
             var participant = new Participant
@@ -113,9 +107,12 @@ namespace CollabService.Services
             };
 
             _context.Participants.Add(participant);
+
+            // ADD — update last activity when someone joins
+            session.LastActivityAt = DateTime.UtcNow;
+
             await _context.SaveChangesAsync();
 
-            // Notify all participants via SignalR
             await _hubContext.Clients
                 .Group(sessionId.ToString())
                 .SendAsync("ParticipantJoined", dto.UserId);
@@ -133,7 +130,6 @@ namespace CollabService.Services
             participant.LeftAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
 
-            // Notify all participants via SignalR
             await _hubContext.Clients
                 .Group(sessionId.ToString())
                 .SendAsync("ParticipantLeft", userId);
@@ -148,7 +144,8 @@ namespace CollabService.Services
             session.EndedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
 
-            // Notify all participants session has ended
+            _otService.ClearSession(sessionId.ToString());
+
             await _hubContext.Clients
                 .Group(sessionId.ToString())
                 .SendAsync("SessionEnded", sessionId);
@@ -167,9 +164,14 @@ namespace CollabService.Services
 
             participant.CursorLine = dto.CursorLine;
             participant.CursorCol = dto.CursorCol;
+
+            // ADD — update last activity on cursor movement
+            var session = await _repository.FindBySessionId(sessionId);
+            if (session != null)
+                session.LastActivityAt = DateTime.UtcNow;
+
             await _context.SaveChangesAsync();
 
-            // Broadcast cursor position to all other participants
             await _hubContext.Clients
                 .Group(sessionId.ToString())
                 .SendAsync("CursorUpdated",
@@ -181,7 +183,14 @@ namespace CollabService.Services
         public async Task BroadcastChange(
             Guid sessionId, BroadcastChangeDto dto)
         {
-            // Broadcast code change to all other participants via SignalR
+            // ADD — update last activity on every code change
+            var session = await _repository.FindBySessionId(sessionId);
+            if (session != null)
+            {
+                session.LastActivityAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+            }
+
             await _hubContext.Clients
                 .Group(sessionId.ToString())
                 .SendAsync("CodeChanged", dto.UserId, dto.Content);
@@ -197,7 +206,6 @@ namespace CollabService.Services
             participant.LeftAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
 
-            // Notify kicked participant and others via SignalR
             await _hubContext.Clients
                 .Group(sessionId.ToString())
                 .SendAsync("ParticipantKicked", userId);
@@ -207,5 +215,30 @@ namespace CollabService.Services
             await _context.CollabSessions
                 .FirstOrDefaultAsync(s =>
                     s.FileId == fileId && s.Status == "ACTIVE");
-    }
-}
+
+        // ADD — returns all ACTIVE sessions, used by SessionCleanupWorker
+        public async Task<IEnumerable<CollabSession>> GetAllActiveSessionsAsync()
+        {
+            return await _context.CollabSessions
+                .Where(s => s.Status == "ACTIVE")
+                .ToListAsync();
+        }
+
+        // ADD — ends session by string sessionId, used by SessionCleanupWorker
+        public async Task EndSessionAsync(string sessionId)
+        {
+            if (Guid.TryParse(sessionId, out var guid))
+            {
+                var session = await _repository.FindBySessionId(guid);
+                if (session != null)
+                {
+                    session.Status = "ENDED";
+                    session.EndedAt = DateTime.UtcNow;
+                    session.LastActivityAt = DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+                }
+            }
+        }
+
+    }  
+}  

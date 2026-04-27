@@ -8,6 +8,7 @@ using NotificationService.Hubs;
 using NotificationService.Interfaces;
 using NotificationService.Repositories;
 using NotificationService.Services;
+using NotificationService.Clients;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,6 +20,8 @@ builder.Services.AddDbContext<NotificationDbContext>(options =>
 // Services
 builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
 builder.Services.AddScoped<INotificationService, NotificationServiceImpl>();
+builder.Services.AddHttpClient<IAuthServiceClient, AuthServiceClient>();
+builder.Services.AddScoped<IAuthServiceClient, AuthServiceClient>();
 
 // SignalR for real-time badge count updates
 builder.Services.AddSignalR();

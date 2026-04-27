@@ -37,6 +37,8 @@ namespace CollabService.Models
         public bool IsPasswordProtected { get; set; } = false;
 
         public string? SessionPassword { get; set; }
+        // Tracks last participant activity for idle cleanup
+        public DateTime LastActivityAt { get; set; } = DateTime.UtcNow;
 
         // Navigation property
         public ICollection<Participant> Participants { get; set; } 

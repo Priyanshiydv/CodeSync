@@ -14,5 +14,7 @@ namespace CollabService.Interfaces
         Task<List<Participant>> FindParticipantsBySessionId(Guid sessionId);
         Task<List<CollabSession>> FindByOwnerId(int ownerId);
         Task<int> CountParticipants(Guid sessionId);
+        // ADD this to existing ICollabRepository interface
+        Task<IEnumerable<CollabSession>> FindActiveSessionsAsync();
     }
 }

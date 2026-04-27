@@ -20,5 +20,7 @@ namespace CollabService.Interfaces
         Task BroadcastChange(Guid sessionId, BroadcastChangeDto dto);
         Task KickParticipant(Guid sessionId, int userId);
         Task<CollabSession?> GetActiveSession(int fileId);
+        Task<IEnumerable<CollabSession>> GetAllActiveSessionsAsync();
+        Task EndSessionAsync(string sessionId);
     }
 }
