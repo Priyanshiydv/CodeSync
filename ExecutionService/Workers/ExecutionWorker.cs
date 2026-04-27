@@ -87,7 +87,7 @@ namespace ExecutionService.Workers
                 {
                     job.Status = "FAILED";
                     job.Stderr = "Unsupported language!";
-                    job.CompletedAt = DateTime.UtcNow;
+                    job.CompletedAt = DateTime.Now;
                     await context.SaveChangesAsync(token);
 
                     // ADD — stream error to frontend
@@ -191,7 +191,7 @@ namespace ExecutionService.Workers
                 job.ExitCode = (int)waitResult.StatusCode;
                 job.ExecutionTimeMs = (long)(DateTime.UtcNow - startTime)
                     .TotalMilliseconds;
-                job.CompletedAt = DateTime.UtcNow;
+                job.CompletedAt = DateTime.Now;
 
                 await dockerClient.Containers
                     .RemoveContainerAsync(container.ID,
@@ -209,7 +209,7 @@ namespace ExecutionService.Workers
             {
                 job.Status = "TIMED_OUT";
                 job.Stderr = "Execution exceeded 10 second time limit!";
-                job.CompletedAt = DateTime.UtcNow;
+                job.CompletedAt = DateTime.Now;
 
                 // ADD — notify frontend of timeout
                 await _hubContext.Clients
@@ -220,7 +220,7 @@ namespace ExecutionService.Workers
             {
                 job.Status = "FAILED";
                 job.Stderr = ex.Message;
-                job.CompletedAt = DateTime.UtcNow;
+                job.CompletedAt = DateTime.Now;
                 _logger.LogError(ex, "Job {JobId} failed", job.JobId);
 
                 // ADD — notify frontend of failure

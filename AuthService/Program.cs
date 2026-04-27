@@ -20,7 +20,8 @@ builder.Services.AddDbContext<AuthDbContext>(options =>
 builder.Services.AddScoped<IAuthService, AuthServiceImpl>();
 builder.Services.AddScoped<JwtHelper>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
-
+// ADD — audit log service
+builder.Services.AddScoped<AuditLogService>();
 // JWT + Google + GitHub OAuth2 Authentication
 var jwtKey = builder.Configuration["Jwt:Key"]!;
 builder.Services.AddAuthentication(options =>

@@ -77,7 +77,7 @@ namespace ExecutionService.Services
                     $"Cannot cancel job with status '{job.Status}'!");
 
             job.Status = "CANCELLED";
-            job.CompletedAt = DateTime.UtcNow;
+            job.CompletedAt = DateTime.Now;
             await _context.SaveChangesAsync();
         }
 

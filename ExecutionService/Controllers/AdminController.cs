@@ -61,7 +61,7 @@ namespace ExecutionService.Controllers
                 return BadRequest(new { message = $"Cannot cancel job with status '{job.Status}'" });
 
             job.Status = "CANCELLED";
-            job.CompletedAt = DateTime.UtcNow;
+            job.CompletedAt = DateTime.Now;
             await _context.SaveChangesAsync();
 
             return Ok(new { message = "Execution cancelled successfully" });
