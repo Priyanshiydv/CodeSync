@@ -155,7 +155,8 @@ namespace FileService.Services
                 Content = string.Empty,
                 CreatedById = userId,
                 LastEditedBy = userId,
-                IsFolder = true
+                IsFolder = true,
+                ParentFolderId = dto.ParentFolderId
             };
 
             _context.CodeFiles.Add(folder);
@@ -163,11 +164,50 @@ namespace FileService.Services
             return folder;
         }
 
-        public async Task<List<CodeFile>> GetFileTree(int projectId) =>
-            await _context.CodeFiles
-                .Where(f => f.ProjectId == projectId)
-                .OrderBy(f => f.Path)
+       public async Task<List<object>> GetFileTree(int projectId)
+        {
+            var allFiles = await _context.CodeFiles
+                .Where(f => f.ProjectId == projectId && !f.IsDeleted)
                 .ToListAsync();
+
+            // Get root level items (ParentFolderId is null)
+            var rootItems = allFiles.Where(f => f.ParentFolderId == null).ToList();
+            var result = new List<object>();
+
+            foreach (var item in rootItems)
+            {
+                result.Add(BuildTreeHierarchy(item, allFiles));
+            }
+
+            return result;
+        }
+
+        private object BuildTreeHierarchy(CodeFile item, List<CodeFile> allFiles)
+        {
+            if (item.IsFolder)
+            {
+                var children = allFiles.Where(f => f.ParentFolderId == item.FileId).ToList();
+                return new
+                {
+                    item.FileId,
+                    item.Name,
+                    item.IsFolder,
+                    expanded = false,
+                    children = children.Select(c => BuildTreeHierarchy(c, allFiles)).ToList()
+                };
+            }
+            else
+            {
+                return new
+                {
+                    item.FileId,
+                    item.Name,
+                    item.IsFolder,
+                    item.Language,
+                    item.Size
+                };
+            }
+        }
 
         public async Task<List<CodeFile>> SearchInProject(
             int projectId, string query) =>

@@ -24,9 +24,9 @@ namespace CollabService.Models
         [Required]
         public string Role { get; set; } = "EDITOR";
 
-        public DateTime JoinedAt { get; set; } = DateTime.UtcNow;
+        public DateTime JoinedAt { get; set; } = DateTime.Now;
 
-        public DateTime? LeftAt { get; set; }
+        public DateTime? LeftAt { get; set; } = DateTime.Now;
 
         // Live cursor position broadcast via SignalR
         public int CursorLine { get; set; } = 0;

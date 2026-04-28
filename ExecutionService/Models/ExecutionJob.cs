@@ -46,6 +46,6 @@ namespace ExecutionService.Models
         public long? MemoryUsedKb { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.Now;
-        public DateTime? CompletedAt { get; set; }
+        public DateTime? CompletedAt { get; set; } = DateTime.Now;
     }
 }

@@ -28,9 +28,9 @@ namespace CollabService.Models
         [Required]
         public string Language { get; set; } = string.Empty;
 
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime CreatedAt { get; set; } = DateTime.Now;
 
-        public DateTime? EndedAt { get; set; }
+        public DateTime? EndedAt { get; set; } = DateTime.Now;
 
         public int MaxParticipants { get; set; } = 10;
 
@@ -38,7 +38,7 @@ namespace CollabService.Models
 
         public string? SessionPassword { get; set; }
         // Tracks last participant activity for idle cleanup
-        public DateTime LastActivityAt { get; set; } = DateTime.UtcNow;
+        public DateTime LastActivityAt { get; set; } = DateTime.Now;
 
         // Navigation property
         public ICollection<Participant> Participants { get; set; } 
