@@ -40,7 +40,8 @@ namespace FileService.Services
                 Size = System.Text.Encoding.UTF8.GetByteCount(dto.Content),
                 CreatedById = userId,
                 LastEditedBy = userId,
-                IsFolder = false
+                IsFolder = false,
+                ParentFolderId = dto.ParentFolderId 
             };
 
             _context.CodeFiles.Add(file);
@@ -88,7 +89,7 @@ namespace FileService.Services
             pathParts[^1] = dto.NewName;
             file.Path = string.Join("/", pathParts);
             file.Name = dto.NewName;
-            file.UpdatedAt = DateTime.UtcNow;
+            file.UpdatedAt = DateTime.Now;
 
             await _context.SaveChangesAsync();
             return file;
@@ -164,50 +165,55 @@ namespace FileService.Services
             return folder;
         }
 
-       public async Task<List<object>> GetFileTree(int projectId)
+        public async Task<List<object>> GetFileTree(int projectId)
         {
             var allFiles = await _context.CodeFiles
                 .Where(f => f.ProjectId == projectId && !f.IsDeleted)
                 .ToListAsync();
 
-            // Get root level items (ParentFolderId is null)
+            // Build lookup for parent-child relationships
+            var lookup = allFiles.ToLookup(f => f.ParentFolderId);
+            
+            // Get root items (no parent)
             var rootItems = allFiles.Where(f => f.ParentFolderId == null).ToList();
             var result = new List<object>();
-
+            
             foreach (var item in rootItems)
             {
-                result.Add(BuildTreeHierarchy(item, allFiles));
+                result.Add(BuildTreeNode(item, lookup));
             }
-
+            
             return result;
         }
 
-        private object BuildTreeHierarchy(CodeFile item, List<CodeFile> allFiles)
+        private object BuildTreeNode(CodeFile file, ILookup<int?, CodeFile> lookup)
         {
-            if (item.IsFolder)
+            if (file.IsFolder)
             {
-                var children = allFiles.Where(f => f.ParentFolderId == item.FileId).ToList();
+                var children = lookup[file.FileId].ToList();
                 return new
                 {
-                    item.FileId,
-                    item.Name,
-                    item.IsFolder,
+                    file.FileId,
+                    file.Name,
+                    file.IsFolder,
                     expanded = false,
-                    children = children.Select(c => BuildTreeHierarchy(c, allFiles)).ToList()
+                    children = children.Select(child => BuildTreeNode(child, lookup)).ToList()
                 };
             }
             else
             {
                 return new
                 {
-                    item.FileId,
-                    item.Name,
-                    item.IsFolder,
-                    item.Language,
-                    item.Size
+                    file.FileId,
+                    file.Name,
+                    file.IsFolder,
+                    file.Language,
+                    file.Size
                 };
             }
         }
+
+       
 
         public async Task<List<CodeFile>> SearchInProject(
             int projectId, string query) =>
