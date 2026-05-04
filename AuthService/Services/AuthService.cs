@@ -114,5 +114,7 @@ namespace AuthService.Services
             user.IsActive = false;
             await _context.SaveChangesAsync();
         }
-    }
+        public async Task<User?> GetUserByUsername(string username) =>
+            await _userRepository.FindByUsername(username);
+         }
 }

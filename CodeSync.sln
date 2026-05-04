@@ -21,6 +21,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CommentService", "CommentSe
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NotificationService", "NotificationService\NotificationService.csproj", "{95D93BDF-9191-4DE0-AE56-01863F1D9692}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodeSync.Tests", "CodeSync.Tests\CodeSync.Tests.csproj", "{8B70DE1F-CCFF-4BC4-AF45-FA9AC4998C8B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -127,6 +129,18 @@ Global
 		{95D93BDF-9191-4DE0-AE56-01863F1D9692}.Release|x64.Build.0 = Release|Any CPU
 		{95D93BDF-9191-4DE0-AE56-01863F1D9692}.Release|x86.ActiveCfg = Release|Any CPU
 		{95D93BDF-9191-4DE0-AE56-01863F1D9692}.Release|x86.Build.0 = Release|Any CPU
+		{8B70DE1F-CCFF-4BC4-AF45-FA9AC4998C8B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8B70DE1F-CCFF-4BC4-AF45-FA9AC4998C8B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8B70DE1F-CCFF-4BC4-AF45-FA9AC4998C8B}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{8B70DE1F-CCFF-4BC4-AF45-FA9AC4998C8B}.Debug|x64.Build.0 = Debug|Any CPU
+		{8B70DE1F-CCFF-4BC4-AF45-FA9AC4998C8B}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{8B70DE1F-CCFF-4BC4-AF45-FA9AC4998C8B}.Debug|x86.Build.0 = Debug|Any CPU
+		{8B70DE1F-CCFF-4BC4-AF45-FA9AC4998C8B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8B70DE1F-CCFF-4BC4-AF45-FA9AC4998C8B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8B70DE1F-CCFF-4BC4-AF45-FA9AC4998C8B}.Release|x64.ActiveCfg = Release|Any CPU
+		{8B70DE1F-CCFF-4BC4-AF45-FA9AC4998C8B}.Release|x64.Build.0 = Release|Any CPU
+		{8B70DE1F-CCFF-4BC4-AF45-FA9AC4998C8B}.Release|x86.ActiveCfg = Release|Any CPU
+		{8B70DE1F-CCFF-4BC4-AF45-FA9AC4998C8B}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
