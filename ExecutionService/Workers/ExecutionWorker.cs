@@ -67,7 +67,7 @@ namespace ExecutionService.Workers
             ExecutionDbContext context,
             CancellationToken token)
         {
-            var startTime = DateTime.Now;
+            var startTime = DateTime.UtcNow;
             var jobId = job.JobId.ToString();
 
             try
@@ -86,7 +86,7 @@ namespace ExecutionService.Workers
                     job.Status = "FAILED";
                     job.Stderr =
                         $"Language '{job.Language}' not supported";
-                    job.CompletedAt = DateTime.Now;
+                    job.CompletedAt = DateTime.UtcNow;
                     await context.SaveChangesAsync(token);
                     await _hubContext.Clients
                         .Group(jobId)
@@ -335,9 +335,9 @@ namespace ExecutionService.Workers
                 job.Stdout = stdout;
                 job.Stderr = stderr;
                 job.ExitCode = (int)waitResult.StatusCode;
-                job.ExecutionTimeMs = (long)(DateTime.Now - startTime)
+                job.ExecutionTimeMs = (long)(DateTime.UtcNow - startTime)
                     .TotalMilliseconds;
-                job.CompletedAt = DateTime.Now;
+                job.CompletedAt = DateTime.UtcNow;
 
                 await dockerClient.Containers
                     .RemoveContainerAsync(
@@ -360,7 +360,7 @@ namespace ExecutionService.Workers
             {
                 job.Status = "TIMED_OUT";
                 job.Stderr = "Execution exceeded time limit!";
-                job.CompletedAt = DateTime.Now;
+                job.CompletedAt = DateTime.UtcNow;
 
                 await _hubContext.Clients
                     .Group(jobId)
@@ -370,7 +370,7 @@ namespace ExecutionService.Workers
             {
                 job.Status = "FAILED";
                 job.Stderr = ex.Message;
-                job.CompletedAt = DateTime.Now;
+                job.CompletedAt = DateTime.UtcNow;
                 _logger.LogError(ex, "Job {JobId} failed", job.JobId);
 
                 await _hubContext.Clients

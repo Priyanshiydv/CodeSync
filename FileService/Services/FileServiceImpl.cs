@@ -89,7 +89,7 @@ namespace FileService.Services
             pathParts[^1] = dto.NewName;
             file.Path = string.Join("/", pathParts);
             file.Name = dto.NewName;
-            file.UpdatedAt = DateTime.Now;
+            file.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
             return file;

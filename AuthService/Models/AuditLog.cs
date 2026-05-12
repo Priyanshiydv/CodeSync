@@ -37,6 +37,6 @@ namespace AuthService.Models
         // IP address of the actor
         public string? IpAddress { get; set; }
 
-        public DateTime CreatedAt { get; set; } = DateTime.Now;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 }

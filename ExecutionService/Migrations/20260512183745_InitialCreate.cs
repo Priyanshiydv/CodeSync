@@ -1,5 +1,6 @@
 ﻿using System;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
@@ -17,21 +18,21 @@ namespace ExecutionService.Migrations
                 name: "ExecutionJobs",
                 columns: table => new
                 {
-                    JobId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    ProjectId = table.Column<int>(type: "int", nullable: false),
-                    FileId = table.Column<int>(type: "int", nullable: false),
-                    UserId = table.Column<int>(type: "int", nullable: false),
-                    Language = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    SourceCode = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Stdin = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    Status = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    Stdout = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    Stderr = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    ExitCode = table.Column<int>(type: "int", nullable: true),
+                    JobId = table.Column<Guid>(type: "uuid", nullable: false),
+                    ProjectId = table.Column<int>(type: "integer", nullable: false),
+                    FileId = table.Column<int>(type: "integer", nullable: false),
+                    UserId = table.Column<int>(type: "integer", nullable: false),
+                    Language = table.Column<string>(type: "text", nullable: false),
+                    SourceCode = table.Column<string>(type: "text", nullable: false),
+                    Stdin = table.Column<string>(type: "text", nullable: true),
+                    Status = table.Column<string>(type: "text", nullable: false),
+                    Stdout = table.Column<string>(type: "text", nullable: true),
+                    Stderr = table.Column<string>(type: "text", nullable: true),
+                    ExitCode = table.Column<int>(type: "integer", nullable: true),
                     ExecutionTimeMs = table.Column<long>(type: "bigint", nullable: true),
                     MemoryUsedKb = table.Column<long>(type: "bigint", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    CompletedAt = table.Column<DateTime>(type: "datetime2", nullable: true)
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    CompletedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -42,13 +43,13 @@ namespace ExecutionService.Migrations
                 name: "SupportedLanguages",
                 columns: table => new
                 {
-                    LanguageId = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    Name = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    DockerImage = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Version = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    FileExtension = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    IsEnabled = table.Column<bool>(type: "bit", nullable: false)
+                    LanguageId = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Name = table.Column<string>(type: "text", nullable: false),
+                    DockerImage = table.Column<string>(type: "text", nullable: false),
+                    Version = table.Column<string>(type: "text", nullable: false),
+                    FileExtension = table.Column<string>(type: "text", nullable: false),
+                    IsEnabled = table.Column<bool>(type: "boolean", nullable: false)
                 },
                 constraints: table =>
                 {
