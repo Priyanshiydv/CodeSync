@@ -26,7 +26,7 @@ namespace CollabService.Models
 
         public DateTime JoinedAt { get; set; } = DateTime.UtcNow;
 
-        public DateTime? LeftAt { get; set; }
+        public DateTime? LeftAt { get; set; } = DateTime.UtcNow;
 
         // Live cursor position broadcast via SignalR
         public int CursorLine { get; set; } = 0;

@@ -12,7 +12,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Database
 builder.Services.AddDbContext<VersionDbContext>(options =>
-    options.UseSqlServer(builder.Configuration
+    options.UseNpgsql(builder.Configuration
         .GetConnectionString("DefaultConnection")));
 
 // Services
@@ -70,11 +70,12 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // CORS for Angular
+var frontendUrl = builder.Configuration["Frontend:BaseUrl"]!;
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAngular", policy =>
     {
-        policy.WithOrigins("http://localhost:4200")
+        policy.WithOrigins(frontendUrl)
               .AllowAnyHeader()
               .AllowAnyMethod();
     });

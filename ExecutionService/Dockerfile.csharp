@@ -1,0 +1,5 @@
+FROM mcr.microsoft.com/dotnet/sdk:8.0
+WORKDIR /app
+RUN dotnet new console -n csharp_app
+WORKDIR /app/csharp_app
+ENTRYPOINT ["dotnet", "run"]

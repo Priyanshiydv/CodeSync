@@ -16,15 +16,18 @@ namespace AuthService.Controllers
         private readonly IAuthService _authService;
         private readonly IUserRepository _userRepository;
         private readonly JwtHelper _jwtHelper;
+        private readonly IConfiguration _config;
 
         public OAuthController(
             IAuthService authService,
             IUserRepository userRepository,
-            JwtHelper jwtHelper)
+            JwtHelper jwtHelper,
+            IConfiguration config)
         {
             _authService = authService;
             _userRepository = userRepository;
             _jwtHelper = jwtHelper;
+            _config = config;
         }
 
         // ─── Google OAuth2 ─────────────────────────────────────────────────
@@ -45,13 +48,13 @@ namespace AuthService.Controllers
         [HttpGet("google/callback")]
         public async Task<IActionResult> GoogleCallback()
         {
-            // Read the claims Google sent back
+            var frontend = _config["Frontend:BaseUrl"];
             var result = await HttpContext
                 .AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
 
             if (!result.Succeeded)
-                 return Redirect(
-                    "http://localhost:4200/auth/login?error=google_failed");
+                return Redirect(
+                    $"{frontend}/auth/login?error=google_failed");
 
 
             var claims = result.Principal!.Claims.ToList();
@@ -69,8 +72,8 @@ namespace AuthService.Controllers
                 c.Type == "picture")?.Value;
 
             if (string.IsNullOrEmpty(email))
-                return Redirect(
-                    "http://localhost:4200/auth/login?error=no_email");
+            return Redirect(
+                $"{frontend}/auth/login?error=no_email");
 
             // Check if user already exists
             var existingUser = await _userRepository
@@ -110,8 +113,8 @@ namespace AuthService.Controllers
                 CookieAuthenticationDefaults.AuthenticationScheme);
 
             return Redirect(
-                $"http://localhost:4200/auth/oauth-callback" +
-                $"?token={token}&provider=google");
+                $"{frontend}/auth/oauth-callback" +
+                 $"?token={token}&provider=google");
         }
 
         // ─── GitHub OAuth2 ─────────────────────────────────────────────────
@@ -129,14 +132,15 @@ namespace AuthService.Controllers
 
         // Step 2 — GitHub redirects back here after user approves
         [HttpGet("github/callback")]
-        public async Task<IActionResult> GitHubCallback()
+       public async Task<IActionResult> GitHubCallback()
         {
+            var frontend = _config["Frontend:BaseUrl"];
             var result = await HttpContext
                 .AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
 
             if (!result.Succeeded)
                 return Redirect(
-                    "http://localhost:4200/auth/login?error=github_failed");
+                    $"{frontend}/auth/login?error=github_failed");
 
             var claims = result.Principal!.Claims.ToList();
 
@@ -191,7 +195,7 @@ namespace AuthService.Controllers
             await HttpContext.SignOutAsync(
                 CookieAuthenticationDefaults.AuthenticationScheme);
             return Redirect(
-                $"http://localhost:4200/auth/oauth-callback" +
+                $"{frontend}/auth/oauth-callback" +
                 $"?token={token}&provider=github");
         }
 

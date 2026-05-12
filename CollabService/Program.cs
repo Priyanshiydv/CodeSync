@@ -9,22 +9,28 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using CollabService.Workers;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Database
 builder.Services.AddDbContext<CollabDbContext>(options =>
-    options.UseSqlServer(builder.Configuration
+    options.UseNpgsql(builder.Configuration
         .GetConnectionString("DefaultConnection")));
 
 // Services
 builder.Services.AddScoped<ICollabRepository, CollabRepository>();
 builder.Services.AddScoped<ICollabService, CollabServiceImpl>();
-
-// SignalR - built into ASP.NET Core 8.0
-builder.Services.AddSignalR();
 builder.Services.AddSingleton<OTService>();
-builder.Services.AddHostedService<CollabService.Workers.SessionCleanupWorker>();
+
+// Session Cleanup Worker 
+builder.Services.AddHostedService<SessionCleanupWorker>();
+
+// SignalR with Redis Backplane
+builder.Services.AddSignalR().AddStackExchangeRedis("localhost:6379", options =>
+{
+    options.Configuration.ChannelPrefix = RedisChannel.Literal("CodeSync");
+});
 
 // JWT Authentication
 var jwtKey = builder.Configuration["Jwt:Key"]!;
@@ -92,11 +98,12 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // CORS for Angular
+var frontendUrl = builder.Configuration["Frontend:BaseUrl"]!;
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAngular", policy =>
     {
-        policy.WithOrigins("http://localhost:4200")
+        policy.WithOrigins(frontendUrl)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials(); // Required for SignalR
@@ -128,7 +135,5 @@ app.MapControllers();
 
 // Map SignalR Hub endpoint
 app.MapHub<CollabHub>("/hubs/collab");
-// ADD — registers SessionCleanupWorker as hosted background service
-builder.Services.AddHostedService<SessionCleanupWorker>();
 
 app.Run();

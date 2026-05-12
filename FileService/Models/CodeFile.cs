@@ -57,5 +57,9 @@ namespace FileService.Models
         /// True if this entry is a folder (no content)
         /// </summary>
         public bool IsFolder { get; set; } = false;
+        /// <summary>
+        /// Parent folder ID (null for root level files/folders)
+        /// </summary>
+        public int? ParentFolderId { get; set; }
     }
 }

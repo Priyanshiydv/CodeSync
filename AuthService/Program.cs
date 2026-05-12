@@ -13,7 +13,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Database Connection
 builder.Services.AddDbContext<AuthDbContext>(options =>
-    options.UseSqlServer(builder.Configuration
+    options.UseNpgsql(builder.Configuration
         .GetConnectionString("DefaultConnection")));
 
 // Register Services
@@ -121,11 +121,12 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
 // CORS for Angular — AllowCredentials required for OAuth2
+var frontendUrl = builder.Configuration["Frontend:BaseUrl"]!;
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAngular", policy =>
     {
-        policy.WithOrigins("http://localhost:4200")
+        policy.WithOrigins(frontendUrl)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();

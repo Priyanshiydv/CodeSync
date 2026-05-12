@@ -30,7 +30,7 @@ namespace CollabService.Models
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-        public DateTime? EndedAt { get; set; }
+        public DateTime? EndedAt { get; set; } = DateTime.UtcNow;
 
         public int MaxParticipants { get; set; } = 10;
 

@@ -42,7 +42,7 @@ namespace AuthService.Services
                     EntityId = entityId,
                     Description = description,
                     IpAddress = ipAddress,
-                    CreatedAt = DateTime.Now
+                    CreatedAt = DateTime.UtcNow
                 };
 
                 _context.AuditLogs.Add(log);

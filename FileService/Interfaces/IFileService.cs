@@ -19,7 +19,7 @@ namespace FileService.Interfaces
         Task<CodeFile> RestoreFile(int fileId);
         Task<CodeFile> MoveFile(int fileId, MoveFileDto dto);
         Task<CodeFile> CreateFolder(int userId, CreateFolderDto dto);
-        Task<List<CodeFile>> GetFileTree(int projectId);
+        Task<List<Object>> GetFileTree(int projectId);
         Task<List<CodeFile>> SearchInProject(int projectId, string query);
     }
 }
