@@ -8,7 +8,7 @@ namespace ProjectService.DTOs
     public class AddMemberDto
     {
         [Required]
-        public int UserId { get; set; }
+        public int? UserId { get; set; }
 
         // OWNER, EDITOR, VIEWER
         [Required]

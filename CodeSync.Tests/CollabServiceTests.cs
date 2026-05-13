@@ -8,6 +8,7 @@ using CollabService.Data;
 using CollabService.Hubs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.SignalR;
+using CollabService.Exceptions;
 
 namespace CodeSync.Tests
 {
@@ -118,7 +119,7 @@ namespace CodeSync.Tests
             var fakeId = Guid.NewGuid();
             _collabRepoMock.Setup(r => r.FindBySessionId(fakeId)).ReturnsAsync((CollabSession?)null);
 
-            Assert.ThrowsAsync<Exception>(() => _collabService.JoinSession(fakeId, new JoinSessionDto { UserId = 1 }));
+            Assert.ThrowsAsync<NotFoundException>(() => _collabService.JoinSession(fakeId, new JoinSessionDto { UserId = 1 }));
         }
 
         // Test 6: JoinSession should throw when session is ENDED
@@ -134,7 +135,7 @@ namespace CodeSync.Tests
             await _context.SaveChangesAsync();
             _collabRepoMock.Setup(r => r.FindBySessionId(session.SessionId)).ReturnsAsync(session);
 
-            Assert.ThrowsAsync<Exception>(() => _collabService.JoinSession(session.SessionId, new JoinSessionDto { UserId = 2 }));
+            Assert.ThrowsAsync<SessionEndedException>(() => _collabService.JoinSession(session.SessionId, new JoinSessionDto { UserId = 2 }));
         }
 
         // Test 7: CreateSession with password protection should store password

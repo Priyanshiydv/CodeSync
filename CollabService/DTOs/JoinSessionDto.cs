@@ -8,7 +8,7 @@ namespace CollabService.DTOs
     public class JoinSessionDto
     {
         [Required]
-        public int UserId { get; set; }
+        public int? UserId { get; set; }
 
         public string? SessionPassword { get; set; }
     }

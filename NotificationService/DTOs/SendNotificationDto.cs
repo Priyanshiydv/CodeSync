@@ -8,10 +8,10 @@ namespace NotificationService.DTOs
     public class SendNotificationDto
     {
         [Required]
-        public int RecipientId { get; set; }
+        public int? RecipientId { get; set; }
 
         [Required]
-        public int ActorId { get; set; }
+        public int? ActorId { get; set; }
 
         /// <summary>
         /// Type: SESSION_INVITE, COMMENT, MENTION, SNAPSHOT, FORK

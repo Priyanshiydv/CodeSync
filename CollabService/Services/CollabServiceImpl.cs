@@ -1,5 +1,6 @@
 using CollabService.Data;
 using CollabService.DTOs;
+using CollabService.Exceptions;
 using CollabService.Interfaces;
 using CollabService.Models;
 using Microsoft.AspNetCore.SignalR;
@@ -38,14 +39,14 @@ namespace CollabService.Services
         {
             var session = new CollabSession
             {
-                ProjectId = dto.ProjectId,
-                FileId = dto.FileId,
+                ProjectId = dto.ProjectId ?? 0,
+                FileId = dto.FileId ?? 0,
                 OwnerId = ownerId,
                 Language = dto.Language,
-                MaxParticipants = dto.MaxParticipants,
-                IsPasswordProtected = dto.IsPasswordProtected,
+                MaxParticipants = dto.MaxParticipants ?? 10,
+                IsPasswordProtected = dto.IsPasswordProtected ?? false,
                 SessionPassword = dto.SessionPassword,
-                LastActivityAt = DateTime.UtcNow  // ADD — initialize activity timestamp
+                LastActivityAt = DateTime.UtcNow
             };
 
             _context.CollabSessions.Add(session);
@@ -76,39 +77,38 @@ namespace CollabService.Services
             Guid sessionId, JoinSessionDto dto)
         {
             var session = await _repository.FindBySessionId(sessionId)
-                ?? throw new Exception("Session not found!");
+                ?? throw new NotFoundException("Session not found!");
 
             if (session.Status == "ENDED")
-                throw new Exception("Session has ended!");
+                throw new SessionEndedException("Session has ended!");
 
             if (session.IsPasswordProtected &&
                 session.SessionPassword != dto.SessionPassword)
-                throw new Exception("Incorrect session password!");
+                throw new UnauthorizedAccessException("Incorrect session password!");
 
             var count = await _repository.CountParticipants(sessionId);
             if (count >= session.MaxParticipants)
-                throw new Exception("Session is full!");
+                throw new SessionFullException("Session is full!");
 
             var existing = await _context.Participants
                 .FirstOrDefaultAsync(p =>
                     p.SessionId == sessionId && p.UserId == dto.UserId);
 
             if (existing != null)
-                throw new Exception("User already in session!");
+                throw new AlreadyExistsException("User already in session!");
 
             var color = _colors[count % _colors.Length];
 
             var participant = new Participant
             {
                 SessionId = sessionId,
-                UserId = dto.UserId,
+                UserId = dto.UserId ?? 0,
                 Role = "EDITOR",
                 Color = color
             };
 
             _context.Participants.Add(participant);
 
-            // ADD — update last activity when someone joins
             session.LastActivityAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
@@ -125,7 +125,7 @@ namespace CollabService.Services
             var participant = await _context.Participants
                 .FirstOrDefaultAsync(p =>
                     p.SessionId == sessionId && p.UserId == userId)
-                ?? throw new Exception("Participant not found!");
+                ?? throw new NotFoundException("Participant not found!");
 
             participant.LeftAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
@@ -138,7 +138,7 @@ namespace CollabService.Services
         public async Task EndSession(Guid sessionId)
         {
             var session = await _repository.FindBySessionId(sessionId)
-                ?? throw new Exception("Session not found!");
+                ?? throw new NotFoundException("Session not found!");
 
             session.Status = "ENDED";
             session.EndedAt = DateTime.UtcNow;
@@ -160,12 +160,11 @@ namespace CollabService.Services
             var participant = await _context.Participants
                 .FirstOrDefaultAsync(p =>
                     p.SessionId == sessionId && p.UserId == dto.UserId)
-                ?? throw new Exception("Participant not found!");
+                ?? throw new NotFoundException("Participant not found!");
 
-            participant.CursorLine = dto.CursorLine;
-            participant.CursorCol = dto.CursorCol;
+            participant.CursorLine = dto.CursorLine ?? 0;
+            participant.CursorCol = dto.CursorCol ?? 0;
 
-            // ADD — update last activity on cursor movement
             var session = await _repository.FindBySessionId(sessionId);
             if (session != null)
                 session.LastActivityAt = DateTime.UtcNow;
@@ -183,7 +182,6 @@ namespace CollabService.Services
         public async Task BroadcastChange(
             Guid sessionId, BroadcastChangeDto dto)
         {
-            // ADD — update last activity on every code change
             var session = await _repository.FindBySessionId(sessionId);
             if (session != null)
             {
@@ -201,7 +199,7 @@ namespace CollabService.Services
             var participant = await _context.Participants
                 .FirstOrDefaultAsync(p =>
                     p.SessionId == sessionId && p.UserId == userId)
-                ?? throw new Exception("Participant not found!");
+                ?? throw new NotFoundException("Participant not found!");
 
             participant.LeftAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
@@ -216,7 +214,6 @@ namespace CollabService.Services
                 .FirstOrDefaultAsync(s =>
                     s.FileId == fileId && s.Status == "ACTIVE");
 
-        // ADD — returns all ACTIVE sessions, used by SessionCleanupWorker
         public async Task<IEnumerable<CollabSession>> GetAllActiveSessionsAsync()
         {
             return await _context.CollabSessions
@@ -224,7 +221,6 @@ namespace CollabService.Services
                 .ToListAsync();
         }
 
-        // ADD — ends session by string sessionId, used by SessionCleanupWorker
         public async Task EndSessionAsync(string sessionId)
         {
             if (Guid.TryParse(sessionId, out var guid))
@@ -239,6 +235,5 @@ namespace CollabService.Services
                 }
             }
         }
-
-    }  
-}  
+    }
+}

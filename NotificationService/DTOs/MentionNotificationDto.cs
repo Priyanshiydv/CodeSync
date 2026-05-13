@@ -4,7 +4,7 @@ namespace NotificationService.DTOs
     // called by CommentService when @username is detected in a comment
     public class MentionNotificationDto
     {
-        public int ActorId { get; set; }
+        public int? ActorId { get; set; }
         public string Type { get; set; } = "MENTION";
         public string Title { get; set; } = string.Empty;
         public string Message { get; set; } = string.Empty;

@@ -127,4 +127,4 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHub<ExecutionHub>("/hubs/execution");
 
-app.Run();
+await app.RunAsync();

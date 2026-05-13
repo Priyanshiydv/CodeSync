@@ -8,10 +8,10 @@ namespace VersionService.DTOs
     public class CreateSnapshotDto
     {
         [Required]
-        public int ProjectId { get; set; }
+        public int? ProjectId { get; set; }
 
         [Required]
-        public int FileId { get; set; }
+        public int? FileId { get; set; }
 
         [Required]
         [MaxLength(500)]

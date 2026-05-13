@@ -8,7 +8,7 @@ namespace NotificationService.DTOs
     public class SendBulkNotificationDto
     {
         [Required]
-        public int ActorId { get; set; }
+        public int? ActorId { get; set; }
 
         [Required]
         public string Title { get; set; } = string.Empty;

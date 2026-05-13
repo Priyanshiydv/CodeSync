@@ -1,5 +1,6 @@
 using CommentService.Data;
 using CommentService.DTOs;
+using CommentService.Exceptions;
 using CommentService.Interfaces;
 using CommentService.Models;
 using Microsoft.EntityFrameworkCore;
@@ -13,15 +14,14 @@ namespace CommentService.Services
     {
         private readonly CommentDbContext _context;
         private readonly ICommentRepository _repository;
-        // ADD — HttpClient to call NotificationService
         private readonly IHttpClientFactory _httpClientFactory;
-        // ADD — NotificationService base URL
         private const string NotificationServiceUrl = "http://localhost:5857/api/notifications";
+
+        private const string CommentNotFound = "Comment not found!";
 
         public CommentServiceImpl(
             CommentDbContext context,
             ICommentRepository repository,
-            // ADD — inject IHttpClientFactory
             IHttpClientFactory httpClientFactory)
         {
             _context = context;
@@ -29,21 +29,12 @@ namespace CommentService.Services
             _httpClientFactory = httpClientFactory;
         }
 
-        /// <summary>
-        /// Parses @mentions from comment content
-        /// e.g. "@john fixed this" → ["john"]
-        /// </summary>
         private static List<string> ParseMentions(string content)
         {
             var matches = Regex.Matches(content, @"@(\w+)");
             return matches.Select(m => m.Groups[1].Value).ToList();
         }
 
-        /// <summary>
-        /// ADD — Calls NotificationService to send a MENTION notification
-        /// for each @username found in the comment content.
-        /// Case study §4.7 — @mentions trigger HttpClient notification calls
-        /// </summary>
         private async Task SendMentionNotificationsAsync(
             Comment comment, List<string> mentionedUsernames)
         {
@@ -55,18 +46,13 @@ namespace CommentService.Services
                 {
                     var payload = new
                     {
-                        // Who triggered the mention
                         actorId = comment.AuthorId,
-                        // Type matches Notification model §4.8
                         type = "MENTION",
                         title = $"@{username} mentioned you in a comment",
                         message = comment.Content,
-                        // RelatedId = CommentId as required by case study §2.8
                         relatedId = comment.CommentId.ToString(),
                         relatedType = "Comment",
-                        // Deep-link URL so recipient can jump to the comment
                         deepLinkUrl = $"/editor/{comment.ProjectId}?file={comment.FileId}&comment={comment.CommentId}",
-                        // Username so NotificationService can resolve recipientId
                         recipientUsername = username
                     };
 
@@ -92,7 +78,6 @@ namespace CommentService.Services
             }
             catch (Exception ex)
             {
-                // Don't fail the comment if notification fails
                 Console.WriteLine(
                     $"Notification error: {ex.Message}");
             }
@@ -101,24 +86,23 @@ namespace CommentService.Services
         public async Task<Comment> AddComment(
             int authorId, AddCommentDto dto)
         {
-            // Validate parent comment exists if reply
             if (dto.ParentCommentId.HasValue)
             {
                 var parent = await _context.Comments
                     .FirstOrDefaultAsync(c =>
                         c.CommentId == dto.ParentCommentId.Value);
                 if (parent == null)
-                    throw new Exception("Parent comment not found!");
+                    throw new NotFoundException("Parent comment not found!");
             }
 
             var comment = new Comment
             {
-                ProjectId = dto.ProjectId,
-                FileId = dto.FileId,
+                ProjectId = dto.ProjectId ?? 0,
+                FileId = dto.FileId ?? 0,
                 AuthorId = authorId,
                 Content = dto.Content,
-                LineNumber = dto.LineNumber,
-                ColumnNumber = dto.ColumnNumber,
+                LineNumber = dto.LineNumber ?? 0,
+                ColumnNumber = dto.ColumnNumber ?? 0,
                 ParentCommentId = dto.ParentCommentId,
                 SnapshotId = dto.SnapshotId
             };
@@ -126,8 +110,6 @@ namespace CommentService.Services
             _context.Comments.Add(comment);
             await _context.SaveChangesAsync();
 
-            // ADD — parse @mentions and call NotificationService
-            // replaces the old Console.WriteLine stub
             var mentions = ParseMentions(dto.Content);
             if (mentions.Any())
             {
@@ -155,12 +137,11 @@ namespace CommentService.Services
         {
             var comment = await _context.Comments
                 .FirstOrDefaultAsync(c => c.CommentId == commentId)
-                ?? throw new Exception("Comment not found!");
+                ?? throw new NotFoundException(CommentNotFound);
 
             comment.Content = dto.Content;
             comment.UpdatedAt = DateTime.UtcNow;
 
-            // ADD — re-parse and send mention notifications on edit too
             var mentions = ParseMentions(dto.Content);
             if (mentions.Any())
             {
@@ -175,9 +156,8 @@ namespace CommentService.Services
         {
             var comment = await _context.Comments
                 .FirstOrDefaultAsync(c => c.CommentId == commentId)
-                ?? throw new Exception("Comment not found!");
+                ?? throw new NotFoundException(CommentNotFound);
 
-            // Also delete all replies to this comment
             var replies = await _repository
                 .FindByParentCommentId(commentId);
             _context.Comments.RemoveRange(replies);
@@ -190,7 +170,7 @@ namespace CommentService.Services
         {
             var comment = await _context.Comments
                 .FirstOrDefaultAsync(c => c.CommentId == commentId)
-                ?? throw new Exception("Comment not found!");
+                ?? throw new NotFoundException(CommentNotFound);
 
             comment.IsResolved = true;
             comment.UpdatedAt = DateTime.UtcNow;
@@ -202,7 +182,7 @@ namespace CommentService.Services
         {
             var comment = await _context.Comments
                 .FirstOrDefaultAsync(c => c.CommentId == commentId)
-                ?? throw new Exception("Comment not found!");
+                ?? throw new NotFoundException(CommentNotFound);
 
             comment.IsResolved = false;
             comment.UpdatedAt = DateTime.UtcNow;

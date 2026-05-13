@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using ProjectService.Data;
 using ProjectService.DTOs;
+using ProjectService.Exceptions;
 using ProjectService.Interfaces;
 using ProjectService.Models;
 
@@ -14,6 +15,7 @@ namespace ProjectService.Services
     {
         private readonly ProjectDbContext _context;
         private readonly IProjectRepository _repository;
+        private const string ProjectNotFound = "Project not found!";
 
         public ProjectServiceImpl(
             ProjectDbContext context,
@@ -38,7 +40,6 @@ namespace ProjectService.Services
             _context.Projects.Add(project);
             await _context.SaveChangesAsync();
 
-            // Add owner as a member with OWNER role
             var member = new ProjectMember
             {
                 ProjectId = project.ProjectId,
@@ -70,7 +71,7 @@ namespace ProjectService.Services
         public async Task<Project> UpdateProject(int projectId, UpdateProjectDto dto)
         {
             var project = await _repository.FindByProjectId(projectId)
-                ?? throw new Exception("Project not found!");
+                ?? throw new NotFoundException(ProjectNotFound);
 
             if (dto.Name != null) project.Name = dto.Name;
             if (dto.Description != null) project.Description = dto.Description;
@@ -85,7 +86,7 @@ namespace ProjectService.Services
         public async Task ArchiveProject(int projectId)
         {
             var project = await _repository.FindByProjectId(projectId)
-                ?? throw new Exception("Project not found!");
+                ?? throw new NotFoundException(ProjectNotFound);
 
             project.IsArchived = true;
             project.UpdatedAt = DateTime.UtcNow;
@@ -95,7 +96,7 @@ namespace ProjectService.Services
         public async Task DeleteProject(int projectId)
         {
             var project = await _repository.FindByProjectId(projectId)
-                ?? throw new Exception("Project not found!");
+                ?? throw new NotFoundException(ProjectNotFound);
 
             _context.Projects.Remove(project);
             await _context.SaveChangesAsync();
@@ -104,9 +105,8 @@ namespace ProjectService.Services
         public async Task<Project> ForkProject(int projectId, int newOwnerId)
         {
             var original = await _repository.FindByProjectId(projectId)
-                ?? throw new Exception("Project not found!");
+                ?? throw new NotFoundException(ProjectNotFound);
 
-            // Create new project as a fork
             var forked = new Project
             {
                 OwnerId = newOwnerId,
@@ -119,12 +119,10 @@ namespace ProjectService.Services
 
             _context.Projects.Add(forked);
 
-            // Increment fork count on original
             original.ForkCount++;
 
             await _context.SaveChangesAsync();
 
-            // Add new owner as member
             _context.ProjectMembers.Add(new ProjectMember
             {
                 ProjectId = forked.ProjectId,
@@ -139,7 +137,7 @@ namespace ProjectService.Services
         public async Task StarProject(int projectId)
         {
             var project = await _repository.FindByProjectId(projectId)
-                ?? throw new Exception("Project not found!");
+                ?? throw new NotFoundException(ProjectNotFound);
 
             project.StarCount++;
             await _context.SaveChangesAsync();
@@ -155,18 +153,17 @@ namespace ProjectService.Services
 
         public async Task AddMember(int projectId, AddMemberDto dto)
         {
-            // Check if already a member
             var exists = await _context.ProjectMembers
                 .AnyAsync(m => m.ProjectId == projectId
                     && m.UserId == dto.UserId);
 
             if (exists)
-                throw new Exception("User is already a member!");
+                throw new AlreadyExistsException("User is already a member!");
 
             _context.ProjectMembers.Add(new ProjectMember
             {
                 ProjectId = projectId,
-                UserId = dto.UserId,
+                UserId = dto.UserId ?? 0,
                 Role = dto.Role
             });
 
@@ -178,7 +175,7 @@ namespace ProjectService.Services
             var member = await _context.ProjectMembers
                 .FirstOrDefaultAsync(m => m.ProjectId == projectId
                     && m.UserId == userId)
-                ?? throw new Exception("Member not found!");
+                ?? throw new NotFoundException("Member not found!");
 
             _context.ProjectMembers.Remove(member);
             await _context.SaveChangesAsync();
