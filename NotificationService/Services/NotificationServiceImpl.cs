@@ -1,0 +1,282 @@
+using MailKit.Net.Smtp;
+using MailKit.Security;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
+using MimeKit;
+using NotificationService.Clients;
+using NotificationService.Data;
+using NotificationService.DTOs;
+using NotificationService.Hubs;
+using NotificationService.Interfaces;
+using NotificationService.Models;
+using NotificationService.Exceptions;
+
+namespace NotificationService.Services
+{
+    public class NotificationServiceImpl : INotificationService
+    {
+        private readonly NotificationDbContext _context;
+        private readonly INotificationRepository _repository;
+        private readonly IHubContext<NotificationHub> _hubContext;
+        private readonly IConfiguration _configuration;
+        private readonly ILogger<NotificationServiceImpl> _logger;
+        private readonly IAuthServiceClient _authServiceClient;
+        private const string UnreadCountUpdatedEvent = "UnreadCountUpdated";
+
+        public NotificationServiceImpl(
+            NotificationDbContext context,
+            INotificationRepository repository,
+            IHubContext<NotificationHub> hubContext,
+            IConfiguration configuration,
+            ILogger<NotificationServiceImpl> logger,
+            IAuthServiceClient authServiceClient)
+        {
+            _context = context;
+            _repository = repository;
+            _hubContext = hubContext;
+            _configuration = configuration;
+            _logger = logger;
+            _authServiceClient = authServiceClient;
+        }
+
+        public async Task<Notification> Send(SendNotificationDto dto)
+        {
+            var notification = new Notification
+            {
+                RecipientId = dto.RecipientId ?? 0,
+                ActorId = dto.ActorId ?? 0,
+                Type = dto.Type,
+                Title = dto.Title,
+                Message = dto.Message,
+                RelatedId = dto.RelatedId,
+                RelatedType = dto.RelatedType,
+                // ADD — store deep-link URL per case study §2.8
+                DeepLinkUrl = dto.DeepLinkUrl
+            };
+
+            _context.Notifications.Add(notification);
+            await _context.SaveChangesAsync();
+
+            // Push real-time unread count to recipient via SignalR
+            var unreadCount = await GetUnreadCount(dto.RecipientId ?? 0);
+            await _hubContext.Clients
+                .Group($"user_{dto.RecipientId}")
+                .SendAsync(UnreadCountUpdatedEvent, unreadCount);
+
+            return notification;
+        }
+
+        public async Task<List<Notification>> SendBulk(
+            SendBulkNotificationDto dto)
+        {
+            var notifications = new List<Notification>();
+
+            List<int> recipientIds;
+            if (dto.RecipientIds != null && dto.RecipientIds.Any())
+            {
+                recipientIds = dto.RecipientIds;
+            }
+            else if (dto.TargetRole == "ALL")
+            {
+                recipientIds = await _authServiceClient.GetAllUserIds();
+            }
+            else
+            {
+                recipientIds = await _authServiceClient
+                    .GetUserIdsByRole(dto.TargetRole!);
+            }
+
+            foreach (var recipientId in recipientIds)
+            {
+                var notification = new Notification
+                {
+                    RecipientId = recipientId,
+                    ActorId = dto.ActorId ?? 0,
+                    Type = dto.Type,
+                    Title = dto.Title,
+                    Message = dto.Message
+                };
+                notifications.Add(notification);
+            }
+
+            _context.Notifications.AddRange(notifications);
+            await _context.SaveChangesAsync();
+
+            foreach (var recipientId in recipientIds.Distinct())
+            {
+                var unreadCount = await GetUnreadCount(recipientId);
+                await _hubContext.Clients
+                    .Group($"user_{recipientId}")
+                    .SendAsync(UnreadCountUpdatedEvent, unreadCount);
+            }
+
+            return notifications;
+        }
+
+        // ADD — resolves @username to recipientId then creates MENTION notification
+        // called by /api/notifications/mention endpoint
+        // wires CommentService @mention parsing to NotificationService
+        // case study §4.7 and §2.8
+        public async Task<Notification> SendMentionNotification(
+            SendNotificationDto dto)
+        {
+            // Resolve recipientId from username via AuthService
+            int recipientId = 0;
+
+            if (!string.IsNullOrEmpty(dto.RecipientUsername))
+            {
+                try
+                {
+                    recipientId = await _authServiceClient
+                        .GetUserIdByUsername(dto.RecipientUsername);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(
+                        "Could not resolve username @{Username}: {Error}",
+                        dto.RecipientUsername, ex.Message);
+                }
+            }
+
+            // If username resolution failed, use RecipientId directly if provided
+            if (recipientId == 0)
+                recipientId = dto.RecipientId ?? 0;
+
+            // Don't notify yourself
+            if (recipientId == 0 || recipientId == dto.ActorId)
+            {
+                _logger.LogInformation(
+                    "Skipping self-mention or unresolved user @{Username}",
+                    dto.RecipientUsername);
+                // Return empty notification — don't throw
+                return new Notification
+                {
+                    Type = "MENTION",
+                    Title = dto.Title,
+                    Message = dto.Message
+                };
+            }
+
+            var notification = new Notification
+            {
+                RecipientId = recipientId,
+                ActorId = dto.ActorId ?? 0,
+                Type = "MENTION",
+                Title = dto.Title,
+                Message = dto.Message,
+                RelatedId = dto.RelatedId,
+                RelatedType = dto.RelatedType,
+                // ADD — deep-link URL per case study §2.8
+                DeepLinkUrl = dto.DeepLinkUrl
+            };
+
+            _context.Notifications.Add(notification);
+            await _context.SaveChangesAsync();
+
+            // Push real-time unread badge to recipient via SignalR
+            var unreadCount = await GetUnreadCount(recipientId);
+            await _hubContext.Clients
+                .Group($"user_{recipientId}")
+                .SendAsync(UnreadCountUpdatedEvent, unreadCount);
+
+            _logger.LogInformation(
+                "Mention notification sent to @{Username} (id: {Id})",
+                dto.RecipientUsername, recipientId);
+
+            return notification;
+        }
+
+        public async Task<Notification> MarkAsRead(int notificationId)
+        {
+            var notification = await _context.Notifications
+                .FirstOrDefaultAsync(n =>
+                    n.NotificationId == notificationId)
+                ?? throw new NotFoundException("Notification not found!");
+
+            notification.IsRead = true;
+            await _context.SaveChangesAsync();
+
+            var unreadCount = await GetUnreadCount(
+                notification.RecipientId);
+            await _hubContext.Clients
+                .Group($"user_{notification.RecipientId}")
+                .SendAsync(UnreadCountUpdatedEvent, unreadCount);
+
+            return notification;
+        }
+
+        public async Task MarkAllRead(int recipientId)
+        {
+            var notifications = await _context.Notifications
+                .Where(n => n.RecipientId == recipientId && !n.IsRead)
+                .ToListAsync();
+
+            foreach (var n in notifications)
+                n.IsRead = true;
+
+            await _context.SaveChangesAsync();
+
+            await _hubContext.Clients
+                .Group($"user_{recipientId}")
+                .SendAsync(UnreadCountUpdatedEvent, 0);
+        }
+
+        public async Task DeleteRead(int recipientId) =>
+            await _repository
+                .DeleteByRecipientIdAndIsRead(recipientId, true);
+
+        public async Task<List<Notification>> GetByRecipient(
+            int recipientId) =>
+            await _repository.FindByRecipientId(recipientId);
+
+        public async Task<int> GetUnreadCount(int recipientId) =>
+            await _repository
+                .CountByRecipientIdAndIsRead(recipientId, false);
+
+        public async Task DeleteNotification(int notificationId) =>
+            await _repository.DeleteByNotificationId(notificationId);
+
+        public async Task<List<Notification>> GetAll() =>
+            await _context.Notifications
+                .OrderByDescending(n => n.CreatedAt)
+                .ToListAsync();
+
+        public async Task SendEmail(SendEmailDto dto)
+        {
+            try
+            {
+                var email = new MimeMessage();
+                email.From.Add(MailboxAddress.Parse(
+                    _configuration["Email:From"]
+                    ?? "noreply@codesync.com"));
+                email.To.Add(MailboxAddress.Parse(dto.ToEmail));
+                email.Subject = dto.Subject;
+                email.Body = new TextPart("plain") { Text = dto.Body };
+
+                if (_configuration["Email:UseFakeSmtp"] == "true")
+                {
+                    _logger.LogInformation(
+                        "FAKE EMAIL to: {To} Subject: {Subject} Body: {Body}",
+                        dto.ToEmail, dto.Subject, dto.Body);
+                    return;
+                }
+
+                using var smtp = new SmtpClient();
+                await smtp.ConnectAsync(
+                    _configuration["Email:SmtpHost"],
+                    int.Parse(_configuration["Email:SmtpPort"] ?? "587"),
+                    SecureSocketOptions.StartTls);
+                await smtp.AuthenticateAsync(
+                    _configuration["Email:Username"],
+                    _configuration["Email:Password"]);
+                await smtp.SendAsync(email);
+                await smtp.DisconnectAsync(true);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Failed to send email to {Email}", dto.ToEmail);
+            }
+        }
+    }
+}

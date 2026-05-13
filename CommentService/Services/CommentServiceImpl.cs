@@ -1,0 +1,200 @@
+using CommentService.Data;
+using CommentService.DTOs;
+using CommentService.Exceptions;
+using CommentService.Interfaces;
+using CommentService.Models;
+using Microsoft.EntityFrameworkCore;
+using System.Text.RegularExpressions;
+using System.Text;
+using System.Text.Json;
+
+namespace CommentService.Services
+{
+    public class CommentServiceImpl : ICommentService
+    {
+        private readonly CommentDbContext _context;
+        private readonly ICommentRepository _repository;
+        private readonly IHttpClientFactory _httpClientFactory;
+        private const string NotificationServiceUrl = "http://localhost:5857/api/notifications";
+
+        private const string CommentNotFound = "Comment not found!";
+
+        public CommentServiceImpl(
+            CommentDbContext context,
+            ICommentRepository repository,
+            IHttpClientFactory httpClientFactory)
+        {
+            _context = context;
+            _repository = repository;
+            _httpClientFactory = httpClientFactory;
+        }
+
+        private static List<string> ParseMentions(string content)
+        {
+            var matches = Regex.Matches(content, @"@(\w+)");
+            return matches.Select(m => m.Groups[1].Value).ToList();
+        }
+
+        private async Task SendMentionNotificationsAsync(
+            Comment comment, List<string> mentionedUsernames)
+        {
+            try
+            {
+                var client = _httpClientFactory.CreateClient();
+
+                foreach (var username in mentionedUsernames)
+                {
+                    var payload = new
+                    {
+                        actorId = comment.AuthorId,
+                        type = "MENTION",
+                        title = $"@{username} mentioned you in a comment",
+                        message = comment.Content,
+                        relatedId = comment.CommentId.ToString(),
+                        relatedType = "Comment",
+                        deepLinkUrl = $"/editor/{comment.ProjectId}?file={comment.FileId}&comment={comment.CommentId}",
+                        recipientUsername = username
+                    };
+
+                    var json = JsonSerializer.Serialize(payload);
+                    var content = new StringContent(
+                        json, Encoding.UTF8, "application/json");
+
+                    var response = await client.PostAsync(
+                        $"{NotificationServiceUrl}/mention", content);
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        Console.WriteLine(
+                            $"Failed to send mention notification " +
+                            $"to @{username}: {response.StatusCode}");
+                    }
+                    else
+                    {
+                        Console.WriteLine(
+                            $"Mention notification sent to @{username}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(
+                    $"Notification error: {ex.Message}");
+            }
+        }
+
+        public async Task<Comment> AddComment(
+            int authorId, AddCommentDto dto)
+        {
+            if (dto.ParentCommentId.HasValue)
+            {
+                var parent = await _context.Comments
+                    .FirstOrDefaultAsync(c =>
+                        c.CommentId == dto.ParentCommentId.Value);
+                if (parent == null)
+                    throw new NotFoundException("Parent comment not found!");
+            }
+
+            var comment = new Comment
+            {
+                ProjectId = dto.ProjectId ?? 0,
+                FileId = dto.FileId ?? 0,
+                AuthorId = authorId,
+                Content = dto.Content,
+                LineNumber = dto.LineNumber ?? 0,
+                ColumnNumber = dto.ColumnNumber ?? 0,
+                ParentCommentId = dto.ParentCommentId,
+                SnapshotId = dto.SnapshotId
+            };
+
+            _context.Comments.Add(comment);
+            await _context.SaveChangesAsync();
+
+            var mentions = ParseMentions(dto.Content);
+            if (mentions.Any())
+            {
+                await SendMentionNotificationsAsync(comment, mentions);
+            }
+
+            return comment;
+        }
+
+        public async Task<List<Comment>> GetByFile(int fileId) =>
+            await _repository.FindByFileId(fileId);
+
+        public async Task<List<Comment>> GetByProject(int projectId) =>
+            await _repository.FindByProjectId(projectId);
+
+        public async Task<Comment?> GetCommentById(int commentId) =>
+            await _context.Comments
+                .FirstOrDefaultAsync(c => c.CommentId == commentId);
+
+        public async Task<List<Comment>> GetReplies(int parentCommentId) =>
+            await _repository.FindByParentCommentId(parentCommentId);
+
+        public async Task<Comment> UpdateComment(
+            int commentId, UpdateCommentDto dto)
+        {
+            var comment = await _context.Comments
+                .FirstOrDefaultAsync(c => c.CommentId == commentId)
+                ?? throw new NotFoundException(CommentNotFound);
+
+            comment.Content = dto.Content;
+            comment.UpdatedAt = DateTime.UtcNow;
+
+            var mentions = ParseMentions(dto.Content);
+            if (mentions.Any())
+            {
+                await SendMentionNotificationsAsync(comment, mentions);
+            }
+
+            await _context.SaveChangesAsync();
+            return comment;
+        }
+
+        public async Task DeleteComment(int commentId)
+        {
+            var comment = await _context.Comments
+                .FirstOrDefaultAsync(c => c.CommentId == commentId)
+                ?? throw new NotFoundException(CommentNotFound);
+
+            var replies = await _repository
+                .FindByParentCommentId(commentId);
+            _context.Comments.RemoveRange(replies);
+            _context.Comments.Remove(comment);
+
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task<Comment> ResolveComment(int commentId)
+        {
+            var comment = await _context.Comments
+                .FirstOrDefaultAsync(c => c.CommentId == commentId)
+                ?? throw new NotFoundException(CommentNotFound);
+
+            comment.IsResolved = true;
+            comment.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+            return comment;
+        }
+
+        public async Task<Comment> UnresolveComment(int commentId)
+        {
+            var comment = await _context.Comments
+                .FirstOrDefaultAsync(c => c.CommentId == commentId)
+                ?? throw new NotFoundException(CommentNotFound);
+
+            comment.IsResolved = false;
+            comment.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+            return comment;
+        }
+
+        public async Task<List<Comment>> GetByLine(
+            int fileId, int lineNumber) =>
+            await _repository.FindByLineNumber(fileId, lineNumber);
+
+        public async Task<int> GetCommentCount(int fileId) =>
+            await _repository.CountByFileId(fileId);
+    }
+}
