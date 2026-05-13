@@ -16,6 +16,8 @@ namespace AuthService.Controllers
         // ADD — audit log service
         private readonly AuditLogService _auditLog;
 
+        private const string UserNotFound = "User not found";
+
         public AdminController(
             AuthDbContext context,
             AuditLogService auditLog)
@@ -81,7 +83,7 @@ namespace AuthService.Controllers
                 .FirstOrDefaultAsync();
 
             if (user == null)
-                return NotFound(new { message = "User not found" });
+                return NotFound(new { message = UserNotFound });
 
             return Ok(user);
         }
@@ -92,7 +94,7 @@ namespace AuthService.Controllers
         {
             var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == id);
             if (user == null)
-                return NotFound(new { message = "User not found" });
+                return NotFound(new { message = UserNotFound });
 
             var adminId = GetAdminId();
             if (user.UserId == adminId)
@@ -100,7 +102,6 @@ namespace AuthService.Controllers
                 {
                     message = "Cannot suspend yourself!"
                 });
-            var username = user.Username;
 
             user.IsActive = false;
             await _context.SaveChangesAsync();
@@ -125,8 +126,8 @@ namespace AuthService.Controllers
         {
             var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == id);
             if (user == null)
-                return NotFound(new { message = "User not found" });
-            var username = user.Username;
+                return NotFound(new { message = UserNotFound });
+    
             user.IsActive = true;
             await _context.SaveChangesAsync();
 
@@ -151,7 +152,7 @@ namespace AuthService.Controllers
         {
             var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId ==id);
             if (user == null)
-                return NotFound(new { message = "User not found" });
+                return NotFound(new { message = UserNotFound });
 
             if (request.Role != "DEVELOPER" && request.Role != "ADMIN")
                 return BadRequest(new { message = "Invalid role" });
@@ -190,7 +191,7 @@ namespace AuthService.Controllers
         {
             var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == id);
             if (user == null)
-                return NotFound(new { message = "User not found" });
+                return NotFound(new { message = UserNotFound });
 
             var adminId = GetAdminId();
             if (user.UserId == adminId)
@@ -199,7 +200,7 @@ namespace AuthService.Controllers
                     message = "Cannot delete yourself!"
                 });
 
-            var username = user.Username;
+            
             _context.Users.Remove(user);
             await _context.SaveChangesAsync();
 
@@ -210,7 +211,7 @@ namespace AuthService.Controllers
                 action: "DELETE_USER",
                 entityType: "User",
                 entityId: id.ToString(),
-                description: $"Permanently deleted user '{username}' (ID: {id})",
+                description: $"Permanently deleted user '{user.Username}' (ID: {id})",
                 ipAddress: GetIp()
             );
 

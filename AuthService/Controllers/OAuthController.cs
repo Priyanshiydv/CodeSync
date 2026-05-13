@@ -65,15 +65,14 @@ namespace AuthService.Controllers
             var fullName = claims.FirstOrDefault(c =>
                 c.Type == ClaimTypes.Name)?.Value ?? "";
 
-            var googleId = claims.FirstOrDefault(c =>
-                c.Type == ClaimTypes.NameIdentifier)?.Value ?? "";
-
             var avatarUrl = claims.FirstOrDefault(c =>
                 c.Type == "picture")?.Value;
 
             if (string.IsNullOrEmpty(email))
-            return Redirect(
-                $"{frontend}/auth/login?error=no_email");
+            {
+                return Redirect(
+                    $"{frontend}/auth/login?error=no_email");
+            }
 
             // Check if user already exists
             var existingUser = await _userRepository

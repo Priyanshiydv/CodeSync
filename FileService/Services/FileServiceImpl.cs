@@ -1,5 +1,6 @@
 using FileService.Data;
 using FileService.DTOs;
+using FileService.Exceptions;
 using FileService.Interfaces;
 using FileService.Models;
 using Microsoft.EntityFrameworkCore;
@@ -14,6 +15,7 @@ namespace FileService.Services
     {
         private readonly FileDbContext _context;
         private readonly IFileRepository _repository;
+        private const string FileNotFound = "File not found!";
 
         public FileServiceImpl(FileDbContext context, IFileRepository repository)
         {
@@ -23,16 +25,15 @@ namespace FileService.Services
 
         public async Task<CodeFile> CreateFile(int userId, CreateFileDto dto)
         {
-            // Check if file already exists at this path
             var existing = await _repository
-                .FindByProjectIdAndPath(dto.ProjectId, dto.Path);
+                .FindByProjectIdAndPath(dto.ProjectId ?? 0, dto.Path);
 
             if (existing != null)
-                throw new Exception("A file already exists at this path!");
+                throw new AlreadyExistsException("A file already exists at this path!");
 
             var file = new CodeFile
             {
-                ProjectId = dto.ProjectId,
+                ProjectId = dto.ProjectId ?? 0,
                 Name = dto.Name,
                 Path = dto.Path,
                 Language = dto.Language,
@@ -58,7 +59,7 @@ namespace FileService.Services
         public async Task<string> GetFileContent(int fileId)
         {
             var file = await _repository.FindByFileId(fileId)
-                ?? throw new Exception("File not found!");
+                ?? throw new NotFoundException(FileNotFound);
             return file.Content;
         }
 
@@ -66,13 +67,12 @@ namespace FileService.Services
             int fileId, UpdateFileContentDto dto)
         {
             var file = await _repository.FindByFileId(fileId)
-                ?? throw new Exception("File not found!");
+                ?? throw new NotFoundException(FileNotFound);
 
             file.Content = dto.Content;
             file.Size = System.Text.Encoding.UTF8.GetByteCount(dto.Content);
 
-            // Record who made this edit for collaborative attribution
-            file.LastEditedBy = dto.EditedByUserId;
+            file.LastEditedBy = dto.EditedByUserId ?? 0;
             file.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
@@ -82,9 +82,8 @@ namespace FileService.Services
         public async Task<CodeFile> RenameFile(int fileId, RenameFileDto dto)
         {
             var file = await _repository.FindByFileId(fileId)
-                ?? throw new Exception("File not found!");
+                ?? throw new NotFoundException(FileNotFound);
 
-            // Update path with new name
             var pathParts = file.Path.Split('/');
             pathParts[^1] = dto.NewName;
             file.Path = string.Join("/", pathParts);
@@ -98,9 +97,8 @@ namespace FileService.Services
         public async Task DeleteFile(int fileId)
         {
             var file = await _repository.FindByFileId(fileId)
-                ?? throw new Exception("File not found!");
+                ?? throw new NotFoundException(FileNotFound);
 
-            // Soft delete - preserves file for potential restoration
             file.IsDeleted = true;
             file.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
@@ -108,11 +106,10 @@ namespace FileService.Services
 
         public async Task<CodeFile> RestoreFile(int fileId)
         {
-            // Bypass soft delete filter to find deleted file
             var file = await _context.CodeFiles
                 .IgnoreQueryFilters()
                 .FirstOrDefaultAsync(f => f.FileId == fileId)
-                ?? throw new Exception("File not found!");
+                ?? throw new NotFoundException(FileNotFound);
 
             file.IsDeleted = false;
             file.UpdatedAt = DateTime.UtcNow;
@@ -123,14 +120,13 @@ namespace FileService.Services
         public async Task<CodeFile> MoveFile(int fileId, MoveFileDto dto)
         {
             var file = await _repository.FindByFileId(fileId)
-                ?? throw new Exception("File not found!");
+                ?? throw new NotFoundException(FileNotFound);
 
-            // Check nothing exists at destination path
             var existing = await _repository
                 .FindByProjectIdAndPath(file.ProjectId, dto.NewPath);
 
             if (existing != null)
-                throw new Exception("A file already exists at destination path!");
+                throw new AlreadyExistsException("A file already exists at destination path!");
 
             file.Path = dto.NewPath;
             file.UpdatedAt = DateTime.UtcNow;
@@ -142,14 +138,14 @@ namespace FileService.Services
             int userId, CreateFolderDto dto)
         {
             var existing = await _repository
-                .FindByProjectIdAndPath(dto.ProjectId, dto.Path);
+                .FindByProjectIdAndPath(dto.ProjectId ?? 0, dto.Path);
 
             if (existing != null)
-                throw new Exception("A folder already exists at this path!");
+                throw new AlreadyExistsException("A folder already exists at this path!");
 
             var folder = new CodeFile
             {
-                ProjectId = dto.ProjectId,
+                ProjectId = dto.ProjectId ?? 0,
                 Name = dto.Name,
                 Path = dto.Path,
                 Language = "folder",
@@ -171,10 +167,8 @@ namespace FileService.Services
                 .Where(f => f.ProjectId == projectId && !f.IsDeleted)
                 .ToListAsync();
 
-            // Build lookup for parent-child relationships
             var lookup = allFiles.ToLookup(f => f.ParentFolderId);
             
-            // Get root items (no parent)
             var rootItems = allFiles.Where(f => f.ParentFolderId == null).ToList();
             var result = new List<object>();
             
@@ -186,7 +180,7 @@ namespace FileService.Services
             return result;
         }
 
-        private object BuildTreeNode(CodeFile file, ILookup<int?, CodeFile> lookup)
+        private static object BuildTreeNode(CodeFile file, ILookup<int?, CodeFile> lookup)
         {
             if (file.IsFolder)
             {
@@ -212,8 +206,6 @@ namespace FileService.Services
                 };
             }
         }
-
-       
 
         public async Task<List<CodeFile>> SearchInProject(
             int projectId, string query) =>

@@ -1,5 +1,6 @@
 using AuthService.Data;
 using AuthService.DTOs;
+using AuthService.Exceptions;
 using AuthService.Helpers;
 using AuthService.Interfaces;
 using AuthService.Models;
@@ -30,10 +31,10 @@ namespace AuthService.Services
         {
             // Check if email or username already exists
             if (await _userRepository.ExistsByEmail(user.Email))
-                throw new Exception("Email already registered!");
+                throw new ConflictException("Email already registered!");
 
             if (await _userRepository.ExistsByUsername(user.Username))
-                throw new Exception("Username already taken!");
+                throw new ConflictException("Username already taken!");
 
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(user.PasswordHash);
             _context.Users.Add(user);
@@ -45,13 +46,13 @@ namespace AuthService.Services
         public async Task<string> Login(string email, string password)
         {
             var user = await _userRepository.FindByEmail(email)
-                ?? throw new Exception("Invalid email or password!");
+                ?? throw new InvalidCredentialsException("Invalid email or password!");
 
             if (!BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
-                throw new Exception("Invalid email or password!");
+                throw new InvalidCredentialsException("Invalid email or password!");
 
             if (!user.IsActive)
-                throw new Exception("Account is deactivated!");
+                throw new UnauthorizedException("Account is deactivated!");
 
             return _jwtHelper.GenerateToken(user);
         }
@@ -83,7 +84,7 @@ namespace AuthService.Services
         public async Task<string> UpdateProfile(int userId, UpdateProfileDto dto)
         {
             var user = await _userRepository.FindByUserId(userId)
-                ?? throw new Exception("User not found!");
+                ?? throw new NotFoundException("User not found!");
 
             if (dto.FullName != null) user.FullName = dto.FullName;
             if (dto.Username != null) user.Username = dto.Username;
@@ -97,7 +98,7 @@ namespace AuthService.Services
         public async Task ChangePassword(int userId, string newPassword)
         {
             var user = await _userRepository.FindByUserId(userId)
-                ?? throw new Exception("User not found!");
+                ?? throw new NotFoundException("User not found!");
 
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
             await _context.SaveChangesAsync();
@@ -109,12 +110,12 @@ namespace AuthService.Services
         public async Task DeactivateAccount(int userId)
         {
             var user = await _userRepository.FindByUserId(userId)
-                ?? throw new Exception("User not found!");
+                ?? throw new NotFoundException("User not found!");
 
             user.IsActive = false;
             await _context.SaveChangesAsync();
         }
         public async Task<User?> GetUserByUsername(string username) =>
             await _userRepository.FindByUsername(username);
-         }
+    }
 }

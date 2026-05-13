@@ -9,6 +9,7 @@ using NotificationService.DTOs;
 using NotificationService.Hubs;
 using NotificationService.Interfaces;
 using NotificationService.Models;
+using NotificationService.Exceptions;
 
 namespace NotificationService.Services
 {
@@ -20,6 +21,7 @@ namespace NotificationService.Services
         private readonly IConfiguration _configuration;
         private readonly ILogger<NotificationServiceImpl> _logger;
         private readonly IAuthServiceClient _authServiceClient;
+        private const string UnreadCountUpdatedEvent = "UnreadCountUpdated";
 
         public NotificationServiceImpl(
             NotificationDbContext context,
@@ -41,8 +43,8 @@ namespace NotificationService.Services
         {
             var notification = new Notification
             {
-                RecipientId = dto.RecipientId,
-                ActorId = dto.ActorId,
+                RecipientId = dto.RecipientId ?? 0,
+                ActorId = dto.ActorId ?? 0,
                 Type = dto.Type,
                 Title = dto.Title,
                 Message = dto.Message,
@@ -56,10 +58,10 @@ namespace NotificationService.Services
             await _context.SaveChangesAsync();
 
             // Push real-time unread count to recipient via SignalR
-            var unreadCount = await GetUnreadCount(dto.RecipientId);
+            var unreadCount = await GetUnreadCount(dto.RecipientId ?? 0);
             await _hubContext.Clients
                 .Group($"user_{dto.RecipientId}")
-                .SendAsync("UnreadCountUpdated", unreadCount);
+                .SendAsync(UnreadCountUpdatedEvent, unreadCount);
 
             return notification;
         }
@@ -89,7 +91,7 @@ namespace NotificationService.Services
                 var notification = new Notification
                 {
                     RecipientId = recipientId,
-                    ActorId = dto.ActorId,
+                    ActorId = dto.ActorId ?? 0,
                     Type = dto.Type,
                     Title = dto.Title,
                     Message = dto.Message
@@ -105,7 +107,7 @@ namespace NotificationService.Services
                 var unreadCount = await GetUnreadCount(recipientId);
                 await _hubContext.Clients
                     .Group($"user_{recipientId}")
-                    .SendAsync("UnreadCountUpdated", unreadCount);
+                    .SendAsync(UnreadCountUpdatedEvent, unreadCount);
             }
 
             return notifications;
@@ -138,7 +140,7 @@ namespace NotificationService.Services
 
             // If username resolution failed, use RecipientId directly if provided
             if (recipientId == 0)
-                recipientId = dto.RecipientId;
+                recipientId = dto.RecipientId ?? 0;
 
             // Don't notify yourself
             if (recipientId == 0 || recipientId == dto.ActorId)
@@ -158,7 +160,7 @@ namespace NotificationService.Services
             var notification = new Notification
             {
                 RecipientId = recipientId,
-                ActorId = dto.ActorId,
+                ActorId = dto.ActorId ?? 0,
                 Type = "MENTION",
                 Title = dto.Title,
                 Message = dto.Message,
@@ -175,7 +177,7 @@ namespace NotificationService.Services
             var unreadCount = await GetUnreadCount(recipientId);
             await _hubContext.Clients
                 .Group($"user_{recipientId}")
-                .SendAsync("UnreadCountUpdated", unreadCount);
+                .SendAsync(UnreadCountUpdatedEvent, unreadCount);
 
             _logger.LogInformation(
                 "Mention notification sent to @{Username} (id: {Id})",
@@ -189,7 +191,7 @@ namespace NotificationService.Services
             var notification = await _context.Notifications
                 .FirstOrDefaultAsync(n =>
                     n.NotificationId == notificationId)
-                ?? throw new Exception("Notification not found!");
+                ?? throw new NotFoundException("Notification not found!");
 
             notification.IsRead = true;
             await _context.SaveChangesAsync();
@@ -198,7 +200,7 @@ namespace NotificationService.Services
                 notification.RecipientId);
             await _hubContext.Clients
                 .Group($"user_{notification.RecipientId}")
-                .SendAsync("UnreadCountUpdated", unreadCount);
+                .SendAsync(UnreadCountUpdatedEvent, unreadCount);
 
             return notification;
         }
@@ -216,7 +218,7 @@ namespace NotificationService.Services
 
             await _hubContext.Clients
                 .Group($"user_{recipientId}")
-                .SendAsync("UnreadCountUpdated", 0);
+                .SendAsync(UnreadCountUpdatedEvent, 0);
         }
 
         public async Task DeleteRead(int recipientId) =>

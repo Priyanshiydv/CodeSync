@@ -1,0 +1,17 @@
+﻿C:\Users\asus\OneDrive\Desktop\CodeSync\CodeSync.Tests\AuthServiceTests.cs
+C:\Users\asus\OneDrive\Desktop\CodeSync\CodeSync.Tests\CollabServiceTests.cs
+C:\Users\asus\OneDrive\Desktop\CodeSync\CodeSync.Tests\CommentServiceTests.cs
+C:\Users\asus\OneDrive\Desktop\CodeSync\CodeSync.Tests\ExecutionServiceTests.cs
+C:\Users\asus\OneDrive\Desktop\CodeSync\CodeSync.Tests\FileServiceTests.cs
+C:\Users\asus\OneDrive\Desktop\CodeSync\CodeSync.Tests\NotificationServiceTests.cs
+C:\Users\asus\OneDrive\Desktop\CodeSync\CodeSync.Tests\ProjectServiceTests.cs
+C:\Users\asus\OneDrive\Desktop\CodeSync\CodeSync.Tests\VersionServiceTests.cs
+C:\Users\asus\.nuget\packages\microsoft.net.test.sdk\18.5.1\build\net8.0\Microsoft.NET.Test.Sdk.Program.cs
+C:\Users\asus\.nuget\packages\microsoft.testplatform.testhost\18.5.1\build\net8.0\x64\testhost.exe
+C:\Users\asus\.nuget\packages\microsoft.testplatform.testhost\18.5.1\build\net8.0\x64\testhost.dll
+C:\Users\asus\.nuget\packages\nunit3testadapter\6.2.0\build\net8.0\NUnit3.TestAdapter.pdb
+C:\Users\asus\.nuget\packages\nunit3testadapter\6.2.0\build\net8.0\nunit.engine.dll
+C:\Users\asus\.nuget\packages\nunit3testadapter\6.2.0\build\net8.0\nunit.engine.api.dll
+C:\Users\asus\.nuget\packages\nunit3testadapter\6.2.0\build\net8.0\nunit.engine.core.dll
+C:\Users\asus\.nuget\packages\nunit3testadapter\6.2.0\build\net8.0\testcentric.engine.metadata.dll
+C:\Users\asus\.nuget\packages\nunit3testadapter\6.2.0\build\net8.0\NUnit3.TestAdapter.dll

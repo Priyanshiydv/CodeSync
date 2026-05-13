@@ -8,18 +8,18 @@ namespace CommentService.DTOs
     public class AddCommentDto
     {
         [Required]
-        public int ProjectId { get; set; }
+        public int? ProjectId { get; set; }
 
         [Required]
-        public int FileId { get; set; }
+        public int? FileId { get; set; }
 
         [Required]
         public string Content { get; set; } = string.Empty;
 
         [Required]
-        public int LineNumber { get; set; }
+        public int? LineNumber { get; set; }
 
-        public int ColumnNumber { get; set; } = 0;
+        public int? ColumnNumber { get; set; } = 0;
 
         // Null for top-level, set for replies
         public int? ParentCommentId { get; set; }

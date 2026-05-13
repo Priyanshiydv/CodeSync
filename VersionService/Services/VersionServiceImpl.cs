@@ -5,6 +5,7 @@ using DiffPlex.DiffBuilder.Model;
 using Microsoft.EntityFrameworkCore;
 using VersionService.Data;
 using VersionService.DTOs;
+using VersionService.Exceptions;
 using VersionService.Interfaces;
 using VersionService.Models;
 
@@ -27,9 +28,6 @@ namespace VersionService.Services
             _repository = repository;
         }
 
-        /// <summary>
-        /// Computes SHA-256 hash of content for integrity verification
-        /// </summary>
         private static string ComputeHash(string content)
         {
             var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(content));
@@ -41,12 +39,11 @@ namespace VersionService.Services
         {
             var snapshot = new Snapshot
             {
-                ProjectId = dto.ProjectId,
-                FileId = dto.FileId,
+                ProjectId = dto.ProjectId ?? 0,
+                FileId = dto.FileId ?? 0,
                 AuthorId = authorId,
                 Message = dto.Message,
                 Content = dto.Content,
-                // SHA-256 hash for integrity verification on restore
                 Hash = ComputeHash(dto.Content),
                 ParentSnapshotId = dto.ParentSnapshotId,
                 Branch = dto.Branch
@@ -76,16 +73,13 @@ namespace VersionService.Services
             int snapshotId, int authorId)
         {
             var original = await _repository.FindBySnapshotId(snapshotId)
-                ?? throw new Exception("Snapshot not found!");
+                ?? throw new NotFoundException("Snapshot not found!");
 
-            // Verify integrity using SHA-256 hash before restoring
             var computedHash = ComputeHash(original.Content);
             if (computedHash != original.Hash)
-                throw new Exception(
+                throw new IntegrityException(
                     "Snapshot integrity check failed! Content may be corrupted.");
 
-            // Non-destructive restore - creates NEW snapshot with old content
-            // instead of modifying history
             var restored = new Snapshot
             {
                 ProjectId = original.ProjectId,
@@ -107,21 +101,19 @@ namespace VersionService.Services
             int snapshotId1, int snapshotId2)
         {
             var snapshot1 = await _repository.FindBySnapshotId(snapshotId1)
-                ?? throw new Exception($"Snapshot {snapshotId1} not found!");
+                ?? throw new NotFoundException($"Snapshot {snapshotId1} not found!");
 
             var snapshot2 = await _repository.FindBySnapshotId(snapshotId2)
-                ?? throw new Exception($"Snapshot {snapshotId2} not found!");
+                ?? throw new NotFoundException($"Snapshot {snapshotId2} not found!");
 
-            // Use DiffPlex Myers algorithm for line-by-line diff computation
             var diffBuilder = new InlineDiffBuilder(new DiffPlex.Differ());
             var diff = diffBuilder.BuildDiffModel(
                 snapshot1.Content, snapshot2.Content);
 
-            // Build structured diff result with line annotations
             var lines = diff.Lines.Select(line => new
             {
                 text = line.Text,
-                type = line.Type.ToString(), // Unchanged, Inserted, Deleted
+                type = line.Type.ToString(),
                 position = line.Position
             }).ToList();
 
@@ -139,10 +131,9 @@ namespace VersionService.Services
             int authorId, CreateBranchDto dto)
         {
             var fromSnapshot = await _repository
-                .FindBySnapshotId(dto.FromSnapshotId)
-                ?? throw new Exception("Source snapshot not found!");
+                .FindBySnapshotId(dto.FromSnapshotId ?? 0)
+                ?? throw new NotFoundException("Source snapshot not found!");
 
-            // Create first snapshot on new branch from existing snapshot
             var branchSnapshot = new Snapshot
             {
                 ProjectId = fromSnapshot.ProjectId,
@@ -163,13 +154,12 @@ namespace VersionService.Services
         public async Task<Snapshot> TagSnapshot(TagSnapshotDto dto)
         {
             var snapshot = await _repository
-                .FindBySnapshotId(dto.SnapshotId)
-                ?? throw new Exception("Snapshot not found!");
+                .FindBySnapshotId(dto.SnapshotId ?? 0)
+                ?? throw new NotFoundException("Snapshot not found!");
 
-            // Check tag is not already used
             var existing = await _repository.FindByTag(dto.Tag);
             if (existing != null)
-                throw new Exception($"Tag '{dto.Tag}' already exists!");
+                throw new AlreadyExistsException($"Tag '{dto.Tag}' already exists!");
 
             snapshot.Tag = dto.Tag;
             await _context.SaveChangesAsync();

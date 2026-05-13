@@ -1,4 +1,4 @@
-using NUnit.Framework;
+﻿using NUnit.Framework;
 using Moq;
 using AuthService.Services;
 using AuthService.Interfaces;
@@ -8,6 +8,7 @@ using AuthService.Data;
 using AuthService.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using AuthService.Exceptions;
 
 namespace CodeSync.Tests
 {
@@ -91,7 +92,7 @@ namespace CodeSync.Tests
 
             _userRepoMock.Setup(r => r.ExistsByEmail(user.Email)).ReturnsAsync(true);
 
-            var ex = Assert.ThrowsAsync<Exception>(() => _authService.Register(user));
+            var ex = Assert.ThrowsAsync<ConflictException>(() => _authService.Register(user));
             Assert.That(ex!.Message, Is.EqualTo("Email already registered!"));
         }
 
@@ -111,7 +112,7 @@ namespace CodeSync.Tests
             _userRepoMock.Setup(r => r.ExistsByEmail(user.Email)).ReturnsAsync(false);
             _userRepoMock.Setup(r => r.ExistsByUsername(user.Username)).ReturnsAsync(true);
 
-            var ex = Assert.ThrowsAsync<Exception>(() => _authService.Register(user));
+            var ex = Assert.ThrowsAsync<ConflictException>(() => _authService.Register(user));
             Assert.That(ex!.Message, Is.EqualTo("Username already taken!"));
         }
 
@@ -145,7 +146,7 @@ namespace CodeSync.Tests
             _userRepoMock.Setup(r => r.FindByEmail("wrong@example.com"))
                 .ReturnsAsync((User?)null);
 
-            var ex = Assert.ThrowsAsync<Exception>(
+            var ex = Assert.ThrowsAsync<InvalidCredentialsException>(
                 () => _authService.Login("wrong@example.com", "password123"));
             Assert.That(ex!.Message, Is.EqualTo("Invalid email or password!"));
         }
@@ -166,7 +167,7 @@ namespace CodeSync.Tests
 
             _userRepoMock.Setup(r => r.FindByEmail("test@example.com")).ReturnsAsync(user);
 
-            var ex = Assert.ThrowsAsync<Exception>(
+            var ex = Assert.ThrowsAsync<InvalidCredentialsException>(
                 () => _authService.Login("test@example.com", "wrongpassword"));
             Assert.That(ex!.Message, Is.EqualTo("Invalid email or password!"));
         }
@@ -187,7 +188,7 @@ namespace CodeSync.Tests
 
             _userRepoMock.Setup(r => r.FindByEmail("test@example.com")).ReturnsAsync(user);
 
-            var ex = Assert.ThrowsAsync<Exception>(
+            var ex = Assert.ThrowsAsync<UnauthorizedException>(
                 () => _authService.Login("test@example.com", "password123"));
             Assert.That(ex!.Message, Is.EqualTo("Account is deactivated!"));
         }
@@ -224,7 +225,7 @@ namespace CodeSync.Tests
 
             var dto = new UpdateProfileDto { FullName = "New Name" };
 
-            var ex = Assert.ThrowsAsync<Exception>(
+            var ex = Assert.ThrowsAsync<NotFoundException>(
                 () => _authService.UpdateProfile(999, dto));
             Assert.That(ex!.Message, Is.EqualTo("User not found!"));
         }

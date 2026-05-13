@@ -1,5 +1,6 @@
 using ExecutionService.Data;
 using ExecutionService.DTOs;
+using ExecutionService.Exceptions;
 using ExecutionService.Interfaces;
 using ExecutionService.Models;
 using Microsoft.EntityFrameworkCore;
@@ -27,22 +28,19 @@ namespace ExecutionService.Services
         public async Task<ExecutionJob> SubmitExecution(
             int userId, SubmitExecutionDto dto)
         {
-            // Validate language is supported
             var language = await _context.SupportedLanguages
                 .FirstOrDefaultAsync(l =>
                     l.Name.ToLower() == dto.Language.ToLower()
                     && l.IsEnabled);
 
             if (language == null)
-                throw new Exception(
+                throw new LanguageNotSupportedException(
                     $"Language '{dto.Language}' is not supported!");
 
-            // Create job with QUEUED status
-            // Worker picks it up asynchronously
             var job = new ExecutionJob
             {
-                ProjectId = dto.ProjectId,
-                FileId = dto.FileId,
+                ProjectId = dto.ProjectId ?? 0,
+                FileId = dto.FileId ?? 0,
                 UserId = userId,
                 Language = dto.Language,
                 SourceCode = dto.SourceCode,
@@ -69,11 +67,10 @@ namespace ExecutionService.Services
         public async Task CancelExecution(Guid jobId)
         {
             var job = await _repository.FindByJobId(jobId)
-                ?? throw new Exception("Job not found!");
+                ?? throw new NotFoundException("Job not found!");
 
-            // Can only cancel QUEUED or RUNNING jobs
             if (job.Status != "QUEUED" && job.Status != "RUNNING")
-                throw new Exception(
+                throw new JobCancelException(
                     $"Cannot cancel job with status '{job.Status}'!");
 
             job.Status = "CANCELLED";
@@ -94,7 +91,7 @@ namespace ExecutionService.Services
             var lang = await _context.SupportedLanguages
                 .FirstOrDefaultAsync(l =>
                     l.Name.ToLower() == language.ToLower())
-                ?? throw new Exception(
+                ?? throw new NotFoundException(
                     $"Language '{language}' not found!");
 
             return lang.Version;
@@ -104,7 +101,6 @@ namespace ExecutionService.Services
         {
             var jobs = await _repository.FindByUserId(userId);
 
-            // Compute usage stats for the user
             return new
             {
                 totalJobs = jobs.Count,

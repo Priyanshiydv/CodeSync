@@ -8,12 +8,12 @@ namespace CollabService.DTOs
     public class UpdateCursorDto
     {
         [Required]
-        public int UserId { get; set; }
+        public int? UserId { get; set; }
 
         [Required]
-        public int CursorLine { get; set; }
+        public int? CursorLine { get; set; }
 
         [Required]
-        public int CursorCol { get; set; }
+        public int? CursorCol { get; set; }
     }
 }

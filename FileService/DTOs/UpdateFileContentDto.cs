@@ -14,6 +14,6 @@ namespace FileService.DTOs
         /// UserId of person making the edit - for collaborative attribution
         /// </summary>
         [Required]
-        public int EditedByUserId { get; set; }
+        public int? EditedByUserId { get; set; }
     }
 }

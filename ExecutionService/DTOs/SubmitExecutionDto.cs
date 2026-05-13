@@ -8,10 +8,10 @@ namespace ExecutionService.DTOs
     public class SubmitExecutionDto
     {
         [Required]
-        public int ProjectId { get; set; }
+        public int? ProjectId { get; set; }
 
         [Required]
-        public int FileId { get; set; }
+        public int? FileId { get; set; }
 
         [Required]
         public string Language { get; set; } = string.Empty;

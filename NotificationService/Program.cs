@@ -129,4 +129,4 @@ app.MapControllers();
 // SignalR Hub for real-time notification badge updates
 app.MapHub<NotificationHub>("/hubs/notifications");
 
-app.Run();
+await app.RunAsync();

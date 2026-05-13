@@ -18,7 +18,7 @@ namespace FileService.DTOs
         public string Content { get; set; } = string.Empty;
 
         [Required]
-        public int ProjectId { get; set; }
+        public int? ProjectId { get; set; }
         public int? ParentFolderId { get; set; } 
     }
 }

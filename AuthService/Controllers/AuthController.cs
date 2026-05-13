@@ -58,12 +58,15 @@ namespace AuthService.Controllers
             }
         }
 
-        [HttpPost("logout")]
+       [HttpPost("logout")]
         [Authorize]
-        public async Task<IActionResult> Logout()
+        public async Task<IActionResult> Logout([FromHeader(Name = "Authorization")] string authorization)
         {
-            var token = Request.Headers["Authorization"]
-                .ToString().Replace("Bearer ", "");
+            var token = authorization?.Replace("Bearer ", "");
+            if (string.IsNullOrEmpty(token))
+            {
+                return BadRequest(new { message = "Invalid token" });
+            }
             await _authService.Logout(token);
             return Ok(new { message = "Logged out successfully!" });
         }

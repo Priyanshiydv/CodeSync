@@ -11,6 +11,6 @@ namespace VersionService.DTOs
         public string BranchName { get; set; } = string.Empty;
 
         [Required]
-        public int FromSnapshotId { get; set; }
+        public int? FromSnapshotId { get; set; }
     }
 }

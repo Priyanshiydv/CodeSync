@@ -136,4 +136,4 @@ app.MapControllers();
 // Map SignalR Hub endpoint
 app.MapHub<CollabHub>("/hubs/collab");
 
-app.Run();
+await app.RunAsync();

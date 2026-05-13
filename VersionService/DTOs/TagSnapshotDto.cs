@@ -8,7 +8,7 @@ namespace VersionService.DTOs
     public class TagSnapshotDto
     {
         [Required]
-        public int SnapshotId { get; set; }
+        public int? SnapshotId { get; set; }
 
         // Semantic version tag e.g. v1.0.0
         [Required]
