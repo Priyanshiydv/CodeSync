@@ -26,11 +26,16 @@ builder.Services.AddSingleton<OTService>();
 // Session Cleanup Worker 
 builder.Services.AddHostedService<SessionCleanupWorker>();
 
-// SignalR with Redis Backplane
-builder.Services.AddSignalR().AddStackExchangeRedis("localhost:6379", options =>
+// SignalR (in-memory - fine for single instance on Render free tier)
+var redisUrl = builder.Configuration["Redis:ConnectionString"];
+var signalR = builder.Services.AddSignalR();
+if (!string.IsNullOrEmpty(redisUrl))
 {
-    options.Configuration.ChannelPrefix = RedisChannel.Literal("CodeSync");
-});
+    signalR.AddStackExchangeRedis(redisUrl, options =>
+    {
+        options.Configuration.ChannelPrefix = RedisChannel.Literal("CodeSync");
+    });
+}
 
 // JWT Authentication
 var jwtKey = builder.Configuration["Jwt:Key"]!;
