@@ -24,6 +24,28 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
     db.Database.Migrate();
 }
+
+// One-time admin seed
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+    var adminEmail = "admin@codesync.com";
+    if (!db.Users.Any(u => u.Email == adminEmail))
+    {
+        db.Users.Add(new AuthService.Models.User
+        {
+            FullName = "CodeSync Admin",
+            Username = "admin",
+            Email = adminEmail,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin@123"),
+            Role = "ADMIN",
+            Provider = "LOCAL",
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        });
+        db.SaveChanges();
+    }
+}
 await app.RunAsync();
 
 // ------------------------------------------------------------
