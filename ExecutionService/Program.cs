@@ -126,5 +126,9 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<ExecutionHub>("/hubs/execution");
-
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<ExecutionDbContext>();
+    db.Database.Migrate();
+}
 await app.RunAsync();

@@ -104,5 +104,9 @@ app.UseCors("AllowAngular");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<CommentDbContext>();
+    db.Database.Migrate();
+}
 await app.RunAsync();

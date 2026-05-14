@@ -128,5 +128,9 @@ app.MapControllers();
 
 // SignalR Hub for real-time notification badge updates
 app.MapHub<NotificationHub>("/hubs/notifications");
-
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<NotificationDbContext>();
+    db.Database.Migrate();
+}
 await app.RunAsync();

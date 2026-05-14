@@ -135,5 +135,9 @@ app.MapControllers();
 
 // Map SignalR Hub endpoint
 app.MapHub<CollabHub>("/hubs/collab");
-
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<CollabDbContext>();
+    db.Database.Migrate();
+}
 await app.RunAsync();

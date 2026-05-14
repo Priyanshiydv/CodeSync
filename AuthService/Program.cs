@@ -19,6 +19,11 @@ ConfigureCors(builder);
 var app = builder.Build();
 
 ConfigurePipeline(app);
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+    db.Database.Migrate();
+}
 await app.RunAsync();
 
 // ------------------------------------------------------------
